@@ -22,7 +22,7 @@ pipeline {
             steps {
 
                 // Create virtual environment for clean dependency isolation
-                bat 'python -m venv venv'
+                bat 'py -m venv venv'
             }
         }
 
