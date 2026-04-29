@@ -1,0 +1,13 @@
+{
+    "api_tests": {
+        "create_post": {
+            "title": "QA Automation",
+            "body": "Playwright API test",
+            "user_id": 1
+        },
+
+        "get_single_user": {
+            "user_id": 1
+        }
+    }
+}

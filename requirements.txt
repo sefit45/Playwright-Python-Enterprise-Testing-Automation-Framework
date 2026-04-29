@@ -1,0 +1,23 @@
+# Python testing framework
+pytest
+
+# Playwright integration for pytest
+pytest-playwright
+
+# HTML execution report generation
+pytest-html
+
+# Parallel test execution support
+pytest-xdist
+
+# Allure reporting integration
+allure-pytest
+
+# Environment variable management
+python-dotenv
+
+# HTTP client library
+requests
+
+# Retry failed tests automatically
+pytest-rerunfailures
