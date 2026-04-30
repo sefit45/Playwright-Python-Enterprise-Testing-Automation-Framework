@@ -2,12 +2,19 @@ pipeline {
 
     agent any
 
+    parameters {
+        choice(name: 'ENV', choices: ['dev', 'st', 'uat', 'prod'], description: 'Environment')
+        choice(name: 'TEST_SUITE', choices: ['smoke', 'sanity', 'regression', 'api', 'db', 'ui'], description: 'Test suite')
+    }
+
     environment {
         PYTHON = "C:\\Users\\sefit\\playwright-python-framework\\venv\\Scripts\\python.exe"
         PIP = "C:\\Users\\sefit\\playwright-python-framework\\venv\\Scripts\\pip.exe"
         PYTEST = "C:\\Users\\sefit\\playwright-python-framework\\venv\\Scripts\\pytest.exe"
         PLAYWRIGHT = "C:\\Users\\sefit\\playwright-python-framework\\venv\\Scripts\\playwright.exe"
 
+        SELECTED_ENV = "dev"
+        SELECTED_MARKER = "smoke"
         TEST_STATUS = "0"
     }
 
@@ -29,15 +36,30 @@ pipeline {
             }
         }
 
-        stage('03 - Execute Tests') {
+        stage('03 - Resolve Execution Parameters') {
             steps {
                 script {
 
-                    echo "ALL PARAMS: ${params}"
-                    echo "Running with ENV=${params.ENV} MARKER=${params.TEST_SUITE}"
+                    def envInput = params.ENV.toString().trim().toLowerCase()
+                    def suiteInput = params.TEST_SUITE.toString().trim().toLowerCase()
+
+                    env.SELECTED_ENV = envInput
+                    env.SELECTED_MARKER = suiteInput
+
+                    echo "Resolved ENV: ${env.SELECTED_ENV}"
+                    echo "Resolved MARKER: ${env.SELECTED_MARKER}"
+                }
+            }
+        }
+
+        stage('04 - Execute Tests') {
+            steps {
+                script {
+
+                    echo "Running with ENV=${env.SELECTED_ENV} MARKER=${env.SELECTED_MARKER}"
 
                     def exitCode = bat(
-                        script: "\"${env.PYTEST}\" -n auto -m \"${params.TEST_SUITE} and not demo\" --env=${params.ENV} --alluredir=allure-results",
+                        script: "\"${env.PYTEST}\" -n auto -m \"${env.SELECTED_MARKER} and not demo\" --env=${env.SELECTED_ENV} --alluredir=allure-results",
                         returnStatus: true
                     )
 
@@ -47,7 +69,7 @@ pipeline {
             }
         }
 
-        stage('04 - Allure Report') {
+        stage('05 - Allure Report') {
             steps {
                 allure([
                     includeProperties: false,
@@ -57,27 +79,30 @@ pipeline {
             }
         }
 
-        stage('05 - Archive Reports') {
+        stage('06 - Archive Reports') {
             steps {
                 archiveArtifacts artifacts: 'report.html', allowEmptyArchive: true
                 archiveArtifacts artifacts: 'allure-results/**', allowEmptyArchive: true
             }
         }
 
-        stage('06 - Evaluate Test Results') {
+        stage('07 - Evaluate Test Results') {
             steps {
                 script {
+
                     if (env.TEST_STATUS != "0") {
-                        unstable("Tests failed but reports were generated.")
+                        error("Tests failed - failing pipeline")
                     } else {
-                        echo "All selected tests passed successfully."
+                        echo "All tests passed successfully"
                     }
+
                 }
             }
         }
     }
 
     post {
+
         always {
             echo 'Pipeline finished.'
         }
@@ -86,12 +111,8 @@ pipeline {
             echo 'Automation pipeline completed successfully.'
         }
 
-        unstable {
-            echo 'Automation pipeline completed with test failures. Please review Allure and HTML reports.'
-        }
-
         failure {
-            echo 'Automation pipeline failed due to infrastructure or Jenkins execution issue.'
+            echo 'Pipeline failed due to test or infrastructure issues.'
         }
     }
 }
