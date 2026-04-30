@@ -1,5 +1,6 @@
 {
-    "dev": "https://jsonplaceholder.typicode.com",
-    "qa": "https://jsonplaceholder.typicode.com",
-    "prod": "https://jsonplaceholder.typicode.com"
+  "dev": "https://jsonplaceholder.typicode.com",
+  "st": "https://jsonplaceholder.typicode.com",
+  "uat": "https://jsonplaceholder.typicode.com",
+  "prod": "https://jsonplaceholder.typicode.com"
 }
