@@ -12,7 +12,6 @@ pipeline {
         PIP = "C:\\Users\\sefit\\playwright-python-framework\\venv\\Scripts\\pip.exe"
         PYTEST = "C:\\Users\\sefit\\playwright-python-framework\\venv\\Scripts\\pytest.exe"
         PLAYWRIGHT = "C:\\Users\\sefit\\playwright-python-framework\\venv\\Scripts\\playwright.exe"
-
         TEST_STATUS = "0"
     }
 
@@ -27,7 +26,6 @@ pipeline {
         stage('02 - Install Dependencies') {
             steps {
                 echo 'Installing dependencies...'
-
                 bat "\"${env.PYTHON}\" -m pip install --upgrade pip"
                 bat "\"${env.PIP}\" install -r requirements.txt"
                 bat "\"${env.PLAYWRIGHT}\" install"
@@ -73,7 +71,6 @@ pipeline {
                     if (env.TEST_STATUS != "0") {
                         error("Tests failed. Reports were generated successfully.")
                     } else {
-                        currentBuild.result = 'SUCCESS'
                         echo "All selected tests passed successfully."
                     }
                 }
@@ -90,7 +87,6 @@ pipeline {
                 }
             }
         }
-}
     }
 
     post {
