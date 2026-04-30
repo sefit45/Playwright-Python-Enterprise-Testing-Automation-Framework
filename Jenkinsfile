@@ -24,6 +24,7 @@ pipeline {
         stage('02 - Install Dependencies') {
             steps {
                 echo 'Installing dependencies...'
+
                 bat "\"%PYTHON%\" -m pip install --upgrade pip"
                 bat "\"%PIP%\" install -r requirements.txt"
                 bat "\"%PLAYWRIGHT%\" install"
@@ -34,20 +35,24 @@ pipeline {
             steps {
                 script {
 
-                    // 🔥 IMPORTANT – match Jenkins EXACT parameter names
-                    def rawEnv = params.ENV ?: "dev"
-                    def rawSuite = params.'Test-Suite' ?: "Minimal Connectivity Tests - MCT"
+                    // Print all Jenkins parameters for debugging
+                    echo "ALL PARAMS: ${params}"
 
+                    // Read Jenkins parameters by exact names
+                    def rawEnv = params.ENV ?: "Dev"
+                    def rawSuite = params.TEST_SUITE ?: "Minimal Connectivity Tests - MCT"
+
+                    // Normalize input values
                     def envInput = rawEnv.toString().trim().toLowerCase()
                     def suiteInput = rawSuite.toString().trim().toLowerCase()
 
                     echo "Raw ENV input: '${envInput}'"
                     echo "Raw TEST_SUITE input: '${suiteInput}'"
 
-                    // ✅ ENV FIX
-                    if (envInput.contains("st")) {
+                    // Resolve environment
+                    if (envInput == "st") {
                         env.SELECTED_ENV = "st"
-                    } else if (envInput.contains("uat")) {
+                    } else if (envInput == "uat") {
                         env.SELECTED_ENV = "uat"
                     } else if (envInput.contains("prod")) {
                         env.SELECTED_ENV = "prod"
@@ -55,8 +60,10 @@ pipeline {
                         env.SELECTED_ENV = "dev"
                     }
 
-                    // ✅ SUITE FIX
+                    // Resolve test marker
                     if (suiteInput.contains("regression")) {
+                        env.SELECTED_MARKER = "regression"
+                    } else if (suiteInput.contains("progression")) {
                         env.SELECTED_MARKER = "regression"
                     } else if (suiteInput.contains("api")) {
                         env.SELECTED_MARKER = "api"
@@ -80,6 +87,7 @@ pipeline {
             steps {
                 script {
 
+                    // Run pytest in parallel and exclude demo tests from CI
                     def exitCode = bat(
                         script: "\"%PYTEST%\" -n auto -m \"%SELECTED_MARKER% and not demo\" --env=%SELECTED_ENV% --alluredir=allure-results",
                         returnStatus: true
@@ -124,6 +132,18 @@ pipeline {
     post {
         always {
             echo 'Pipeline finished.'
+        }
+
+        success {
+            echo 'Automation pipeline completed successfully.'
+        }
+
+        unstable {
+            echo 'Automation pipeline completed with test failures. Please review Allure and HTML reports.'
+        }
+
+        failure {
+            echo 'Automation pipeline failed due to infrastructure or Jenkins execution issue.'
         }
     }
 }
