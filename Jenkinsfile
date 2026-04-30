@@ -65,24 +65,18 @@ pipeline {
             }
         }
 
-        stage('06 - Evaluate Test Results') {
+        stage('06 - Final Build Decision') {
             steps {
                 script {
-                    if (env.TEST_STATUS != "0") {
-                        error("Tests failed. Reports were generated successfully.")
-                    } else {
-                        echo "All selected tests passed successfully."
-                    }
-                }
-            }
-        }
 
-        stage('07 - Force Build Result') {
-            steps {
-                script {
+                    echo "Final decision based on TEST_STATUS=${env.TEST_STATUS}"
+
                     if (env.TEST_STATUS == "0") {
-                        echo "Forcing SUCCESS status"
+                        echo "✔ Tests passed → forcing SUCCESS"
                         currentBuild.result = 'SUCCESS'
+                    } else {
+                        echo "❌ Tests failed → marking UNSTABLE"
+                        currentBuild.result = 'UNSTABLE'
                     }
                 }
             }
@@ -95,11 +89,15 @@ pipeline {
         }
 
         success {
-            echo 'Automation pipeline completed successfully.'
+            echo '✅ SUCCESS - Clean execution'
+        }
+
+        unstable {
+            echo '⚠️ UNSTABLE - Tests failed but pipeline completed'
         }
 
         failure {
-            echo 'Automation pipeline failed.'
+            echo '💥 FAILURE - Infrastructure issue'
         }
     }
 }
