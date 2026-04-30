@@ -8,8 +8,6 @@ pipeline {
         PYTEST = "C:\\Users\\sefit\\playwright-python-framework\\venv\\Scripts\\pytest.exe"
         PLAYWRIGHT = "C:\\Users\\sefit\\playwright-python-framework\\venv\\Scripts\\playwright.exe"
 
-        SELECTED_ENV = "dev"
-        SELECTED_MARKER = "smoke"
         TEST_STATUS = "0"
     }
 
@@ -31,60 +29,15 @@ pipeline {
             }
         }
 
-        stage('03 - Resolve Execution Parameters') {
+        stage('03 - Execute Tests') {
             steps {
                 script {
 
                     echo "ALL PARAMS: ${params}"
-
-                    def envInput = params.ENV.toString().trim().toLowerCase()
-                    def suiteInput = params.TEST_SUITE.toString().trim().toLowerCase()
-
-                    echo "ENV INPUT = ${envInput}"
-                    echo "SUITE INPUT = ${suiteInput}"
-
-                    def resolvedEnv = "dev"
-                    def resolvedMarker = "smoke"
-
-                    if (envInput.contains("st")) {
-                        resolvedEnv = "st"
-                    } else if (envInput.contains("uat")) {
-                        resolvedEnv = "uat"
-                    } else if (envInput.contains("prod")) {
-                        resolvedEnv = "prod"
-                    }
-
-                    if (suiteInput.contains("regression")) {
-                        resolvedMarker = "regression"
-                    } else if (suiteInput.contains("progression")) {
-                        resolvedMarker = "regression"
-                    } else if (suiteInput.contains("api")) {
-                        resolvedMarker = "api"
-                    } else if (suiteInput.contains("db")) {
-                        resolvedMarker = "db"
-                    } else if (suiteInput.contains("ui")) {
-                        resolvedMarker = "ui"
-                    } else if (suiteInput.contains("sanity")) {
-                        resolvedMarker = "sanity"
-                    }
-
-                    env.SELECTED_ENV = resolvedEnv
-                    env.SELECTED_MARKER = resolvedMarker
-
-                    echo "Resolved ENV: ${env.SELECTED_ENV}"
-                    echo "Resolved MARKER: ${env.SELECTED_MARKER}"
-                }
-            }
-        }
-
-        stage('04 - Execute Tests') {
-            steps {
-                script {
-
-                    echo "Running with ENV=${env.SELECTED_ENV} MARKER=${env.SELECTED_MARKER}"
+                    echo "Running with ENV=${params.ENV} MARKER=${params.TEST_SUITE}"
 
                     def exitCode = bat(
-                        script: "\"${env.PYTEST}\" -n auto -m \"${env.SELECTED_MARKER} and not demo\" --env=${env.SELECTED_ENV} --alluredir=allure-results",
+                        script: "\"${env.PYTEST}\" -n auto -m \"${params.TEST_SUITE} and not demo\" --env=${params.ENV} --alluredir=allure-results",
                         returnStatus: true
                     )
 
@@ -94,7 +47,7 @@ pipeline {
             }
         }
 
-        stage('05 - Allure Report') {
+        stage('04 - Allure Report') {
             steps {
                 allure([
                     includeProperties: false,
@@ -104,14 +57,14 @@ pipeline {
             }
         }
 
-        stage('06 - Archive Reports') {
+        stage('05 - Archive Reports') {
             steps {
                 archiveArtifacts artifacts: 'report.html', allowEmptyArchive: true
                 archiveArtifacts artifacts: 'allure-results/**', allowEmptyArchive: true
             }
         }
 
-        stage('07 - Evaluate Test Results') {
+        stage('06 - Evaluate Test Results') {
             steps {
                 script {
                     if (env.TEST_STATUS != "0") {
