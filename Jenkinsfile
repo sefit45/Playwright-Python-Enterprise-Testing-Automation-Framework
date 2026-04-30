@@ -34,7 +34,6 @@ pipeline {
         stage('03 - Execute Tests') {
             steps {
                 script {
-
                     echo "Running with ENV=${params.ENV} MARKER=${params.TEST_SUITE}"
 
                     def exitCode = bat(
@@ -51,7 +50,26 @@ pipeline {
             }
         }
 
-        stage('04 - Allure Report') {
+        stage('04 - Add Allure Environment Info') {
+            steps {
+                script {
+                    bat """
+                    if not exist allure-results mkdir allure-results
+
+                    echo Environment=${params.ENV}> allure-results\\environment.properties
+                    echo Test_Suite=${params.TEST_SUITE}>> allure-results\\environment.properties
+                    echo Executor=Jenkins>> allure-results\\environment.properties
+                    echo Build_Number=%BUILD_NUMBER%>> allure-results\\environment.properties
+                    echo Job_Name=%JOB_NAME%>> allure-results\\environment.properties
+                    echo Build_URL=%BUILD_URL%>> allure-results\\environment.properties
+                    echo Git_Branch=%GIT_BRANCH%>> allure-results\\environment.properties
+                    echo Git_Commit=%GIT_COMMIT%>> allure-results\\environment.properties
+                    """
+                }
+            }
+        }
+
+        stage('05 - Allure Report') {
             steps {
                 allure([
                     includeProperties: false,
@@ -61,7 +79,7 @@ pipeline {
             }
         }
 
-        stage('05 - Archive Reports') {
+        stage('06 - Archive Reports') {
             steps {
                 archiveArtifacts artifacts: 'report.html', allowEmptyArchive: true
                 archiveArtifacts artifacts: 'allure-results/**', allowEmptyArchive: true
