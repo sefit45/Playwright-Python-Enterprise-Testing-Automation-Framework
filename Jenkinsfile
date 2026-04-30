@@ -12,7 +12,6 @@ pipeline {
         PIP = "C:\\Users\\sefit\\playwright-python-framework\\venv\\Scripts\\pip.exe"
         PYTEST = "C:\\Users\\sefit\\playwright-python-framework\\venv\\Scripts\\pytest.exe"
         PLAYWRIGHT = "C:\\Users\\sefit\\playwright-python-framework\\venv\\Scripts\\playwright.exe"
-        TEST_STATUS = "0"
     }
 
     stages {
@@ -35,6 +34,7 @@ pipeline {
         stage('03 - Execute Tests') {
             steps {
                 script {
+
                     echo "Running with ENV=${params.ENV} MARKER=${params.TEST_SUITE}"
 
                     def exitCode = bat(
@@ -42,8 +42,11 @@ pipeline {
                         returnStatus: true
                     )
 
-                    env.TEST_STATUS = exitCode.toString()
-                    echo "Pytest exit code: ${env.TEST_STATUS}"
+                    echo "Pytest exit code: ${exitCode}"
+
+                    if (exitCode != 0) {
+                        error("Tests failed")
+                    }
                 }
             }
         }
@@ -64,24 +67,6 @@ pipeline {
                 archiveArtifacts artifacts: 'allure-results/**', allowEmptyArchive: true
             }
         }
-
-        stage('06 - Final Build Decision') {
-            steps {
-                script {
-                    echo "Final decision based on TEST_STATUS=${env.TEST_STATUS}"
-
-                    currentBuild.result = null
-
-                    if (env.TEST_STATUS == "0") {
-                        echo "Tests passed - forcing SUCCESS"
-                        currentBuild.result = 'SUCCESS'
-                    } else {
-                        echo "Tests failed - marking UNSTABLE"
-                        currentBuild.result = 'UNSTABLE'
-                    }
-                }
-            }
-        }
     }
 
     post {
@@ -93,12 +78,8 @@ pipeline {
             echo 'SUCCESS - Clean execution'
         }
 
-        unstable {
-            echo 'UNSTABLE - Tests failed but pipeline completed'
-        }
-
         failure {
-            echo 'FAILURE - Infrastructure issue'
+            echo 'FAILURE - Tests or pipeline failed'
         }
     }
 }
