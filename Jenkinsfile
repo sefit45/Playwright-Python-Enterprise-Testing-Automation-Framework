@@ -1,27 +1,45 @@
-// Jenkins Pipeline for Playwright Python Enterprise Automation Framework
-// This pipeline supports dynamic environment selection, dynamic test suite selection,
-// Allure reporting, artifact archiving, and delayed test result evaluation
+// =========================================================
+// Jenkins Pipeline
+// Playwright Python Enterprise Testing Automation Framework
+// =========================================================
+//
+// Main capabilities:
+// - GitHub checkout
+// - Dynamic environment selection
+// - Dynamic test suite selection
+// - Dependency installation
+// - Playwright browser installation
+// - Parallel pytest execution
+// - Allure report generation
+// - HTML report archiving
+// - Raw Allure results archiving
+// - Delayed test result evaluation
+//
+// =========================================================
 
 pipeline {
 
     // Run pipeline on any available Jenkins agent
     agent any
 
+    // Global environment variables for local Windows Jenkins execution
     environment {
 
-        // Explicit Python virtual environment paths for local Windows Jenkins execution
+        // Python virtual environment executables
         PYTHON = "C:\\Users\\sefit\\playwright-python-framework\\venv\\Scripts\\python.exe"
         PIP = "C:\\Users\\sefit\\playwright-python-framework\\venv\\Scripts\\pip.exe"
         PYTEST = "C:\\Users\\sefit\\playwright-python-framework\\venv\\Scripts\\pytest.exe"
         PLAYWRIGHT = "C:\\Users\\sefit\\playwright-python-framework\\venv\\Scripts\\playwright.exe"
 
-        // Default test status value
+        // Default values used during pipeline execution
+        SELECTED_ENV = "dev"
+        SELECTED_MARKER = "smoke"
         TEST_STATUS = "0"
     }
 
     stages {
 
-        stage('Checkout Code') {
+        stage('01 - Checkout Source Code') {
             steps {
 
                 // Pull latest code from GitHub repository
@@ -29,8 +47,11 @@ pipeline {
             }
         }
 
-        stage('Install Dependencies') {
+        stage('02 - Install Dependencies') {
             steps {
+
+                // Print current stage information
+                echo 'Installing Python dependencies and Playwright browsers...'
 
                 // Upgrade pip package manager
                 bat "\"%PYTHON%\" -m pip install --upgrade pip"
@@ -38,16 +59,16 @@ pipeline {
                 // Install project dependencies from requirements.txt
                 bat "\"%PIP%\" install -r requirements.txt"
 
-                // Install Playwright browsers
+                // Install Playwright supported browsers
                 bat "\"%PLAYWRIGHT%\" install"
             }
         }
 
-        stage('Resolve Test Parameters') {
+        stage('03 - Resolve Execution Parameters') {
             steps {
                 script {
 
-                    // Convert selected Jenkins environment into pytest --env value
+                    // Convert Jenkins environment selection into framework environment value
                     if (params.ENV == 'Dev') {
                         env.SELECTED_ENV = 'dev'
                     } else if (params.ENV == 'ST') {
@@ -62,7 +83,7 @@ pipeline {
                         env.SELECTED_ENV = 'dev'
                     }
 
-                    // Convert selected Jenkins test suite into pytest marker
+                    // Convert Jenkins test suite selection into pytest marker
                     if (params.TEST_SUITE == 'Minimal Connectivity Tests - MCT') {
                         env.SELECTED_MARKER = 'smoke'
                     } else if (params.TEST_SUITE == 'Sanity Tests') {
@@ -81,36 +102,43 @@ pipeline {
                         env.SELECTED_MARKER = 'smoke'
                     }
 
-                    // Print selected execution configuration
-                    echo "Selected environment: ${env.SELECTED_ENV}"
-                    echo "Selected test marker: ${env.SELECTED_MARKER}"
+                    // Print final resolved execution configuration
+                    echo "Selected Jenkins ENV parameter: ${params.ENV}"
+                    echo "Selected Jenkins TEST_SUITE parameter: ${params.TEST_SUITE}"
+                    echo "Resolved framework environment: ${env.SELECTED_ENV}"
+                    echo "Resolved pytest marker: ${env.SELECTED_MARKER}"
                 }
             }
         }
 
-        stage('Run Tests') {
+        stage('04 - Execute Tests') {
             steps {
                 script {
 
-                    // Run pytest and capture exit code without stopping the pipeline immediately
+                    // Print test execution command details
+                    echo "Executing tests with marker: ${env.SELECTED_MARKER}"
+                    echo "Executing tests on environment: ${env.SELECTED_ENV}"
+
+                    // Run pytest with parallel execution and capture exit code
+                    // returnStatus: true allows report generation stages to continue even if tests fail
                     def exitCode = bat(
-                        script: "\"%PYTEST%\" -m %SELECTED_MARKER% --env=%SELECTED_ENV% --alluredir=allure-results",
+                        script: "\"%PYTEST%\" -n auto -m %SELECTED_MARKER% --env=%SELECTED_ENV% --alluredir=allure-results",
                         returnStatus: true
                     )
 
-                    // Print pytest exit code
-                    echo "Pytest exit code: ${exitCode}"
-
-                    // Save pytest exit code for final evaluation
+                    // Save pytest exit code for final evaluation stage
                     env.TEST_STATUS = exitCode.toString()
+
+                    // Print pytest result status
+                    echo "Pytest exit code: ${env.TEST_STATUS}"
                 }
             }
         }
 
-        stage('Generate Allure Report') {
+        stage('05 - Generate Allure Report') {
             steps {
 
-                // Publish Allure report inside Jenkins even if tests failed
+                // Publish Allure report inside Jenkins
                 allure([
                     includeProperties: false,
                     jdk: '',
@@ -119,29 +147,27 @@ pipeline {
             }
         }
 
-        stage('Archive HTML Report') {
+        stage('06 - Archive Reports And Artifacts') {
             steps {
 
-                // Archive pytest HTML report as Jenkins artifact
+                // Archive pytest HTML report
                 archiveArtifacts artifacts: 'report.html', allowEmptyArchive: true
-            }
-        }
 
-        stage('Archive Allure Results') {
-            steps {
-
-                // Archive raw Allure result files as Jenkins artifacts
+                // Archive raw Allure results
                 archiveArtifacts artifacts: 'allure-results/**', allowEmptyArchive: true
             }
         }
 
-        stage('Evaluate Test Results') {
+        stage('07 - Evaluate Test Results') {
             steps {
                 script {
 
-                    // Fail the build only after reports and artifacts were created
+                    // Mark build as UNSTABLE when tests fail
+                    // Reports are already generated before this stage
                     if (env.TEST_STATUS != "0") {
-                        error("Tests failed. Reports were generated successfully. Marking build as FAILED.")
+                        unstable("Tests failed. Reports were generated successfully. Marking build as UNSTABLE.")
+                    } else {
+                        echo "All selected tests passed successfully."
                     }
                 }
             }
@@ -152,20 +178,26 @@ pipeline {
 
         always {
 
-            // Always print final status
+            // Always print final pipeline status
             echo 'Pipeline execution completed.'
         }
 
         success {
 
-            // Success message
-            echo 'Automation tests completed successfully.'
+            // Success message when all stages and tests passed
+            echo 'Automation pipeline completed successfully.'
+        }
+
+        unstable {
+
+            // Unstable message when tests failed but reports were generated
+            echo 'Automation pipeline completed with test failures. Please review Allure and HTML reports.'
         }
 
         failure {
 
-            // Failure message
-            echo 'Automation tests failed. Please check Jenkins reports and artifacts.'
+            // Failure message for infrastructure or pipeline failures
+            echo 'Automation pipeline failed due to infrastructure or execution issue.'
         }
     }
 }
