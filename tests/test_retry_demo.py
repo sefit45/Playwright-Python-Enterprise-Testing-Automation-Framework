@@ -2,9 +2,9 @@
 import pytest
 
 
-# Retry demo test
-# This test is intentionally designed to fail
-# so we can verify that pytest-rerunfailures works correctly
+# Demo marker
+# This test is used only to demonstrate retry mechanism behavior
+@pytest.mark.demo
 @pytest.mark.regression
 def test_retry_demo_failure():
 
@@ -14,7 +14,6 @@ def test_retry_demo_failure():
     # Actual value is intentionally incorrect
     actual_value = 5
 
-    # This assertion will fail on purpose
-    # Pytest should automatically retry this test based on pytest.ini settings
+    # This assertion intentionally fails
+    # This test should not run in normal CI regression execution
     assert actual_value == expected_value
-    
