@@ -24,9 +24,10 @@ pipeline {
         stage('02 - Install Dependencies') {
             steps {
                 echo 'Installing dependencies...'
-                bat "\"%PYTHON%\" -m pip install --upgrade pip"
-                bat "\"%PIP%\" install -r requirements.txt"
-                bat "\"%PLAYWRIGHT%\" install"
+
+                bat "\"${env.PYTHON}\" -m pip install --upgrade pip"
+                bat "\"${env.PIP}\" install -r requirements.txt"
+                bat "\"${env.PLAYWRIGHT}\" install"
             }
         }
 
@@ -36,31 +37,36 @@ pipeline {
 
                     echo "ALL PARAMS: ${params}"
 
-                    // 🔥 Normalize
                     def envInput = params.ENV.toString().trim().toLowerCase()
                     def suiteInput = params.TEST_SUITE.toString().trim().toLowerCase()
 
                     echo "ENV INPUT = ${envInput}"
                     echo "SUITE INPUT = ${suiteInput}"
 
-                    // 🔥 MAP BASED (NO IF AT ALL)
-                    def envMap = [
-                        "st" : "st",
-                        "uat": "uat",
-                        "prod": "prod"
-                    ]
+                    def resolvedEnv = "dev"
+                    def resolvedMarker = "smoke"
 
-                    def suiteMap = [
-                        "regression tests" : "regression",
-                        "progression tests": "regression",
-                        "apis tests"      : "api",
-                        "db tests"        : "db",
-                        "ui tests"        : "ui",
-                        "sanity tests"    : "sanity"
-                    ]
+                    if (envInput.contains("st")) {
+                        resolvedEnv = "st"
+                    } else if (envInput.contains("uat")) {
+                        resolvedEnv = "uat"
+                    } else if (envInput.contains("prod")) {
+                        resolvedEnv = "prod"
+                    }
 
-                    def resolvedEnv = envMap.get(envInput, "dev")
-                    def resolvedMarker = suiteMap.get(suiteInput, "smoke")
+                    if (suiteInput.contains("regression")) {
+                        resolvedMarker = "regression"
+                    } else if (suiteInput.contains("progression")) {
+                        resolvedMarker = "regression"
+                    } else if (suiteInput.contains("api")) {
+                        resolvedMarker = "api"
+                    } else if (suiteInput.contains("db")) {
+                        resolvedMarker = "db"
+                    } else if (suiteInput.contains("ui")) {
+                        resolvedMarker = "ui"
+                    } else if (suiteInput.contains("sanity")) {
+                        resolvedMarker = "sanity"
+                    }
 
                     env.SELECTED_ENV = resolvedEnv
                     env.SELECTED_MARKER = resolvedMarker
@@ -75,8 +81,10 @@ pipeline {
             steps {
                 script {
 
+                    echo "Running with ENV=${env.SELECTED_ENV} MARKER=${env.SELECTED_MARKER}"
+
                     def exitCode = bat(
-                        script: "\"%PYTEST%\" -n auto -m \"%SELECTED_MARKER% and not demo\" --env=%SELECTED_ENV% --alluredir=allure-results",
+                        script: "\"${env.PYTEST}\" -n auto -m \"${env.SELECTED_MARKER} and not demo\" --env=${env.SELECTED_ENV} --alluredir=allure-results",
                         returnStatus: true
                     )
 
@@ -119,6 +127,18 @@ pipeline {
     post {
         always {
             echo 'Pipeline finished.'
+        }
+
+        success {
+            echo 'Automation pipeline completed successfully.'
+        }
+
+        unstable {
+            echo 'Automation pipeline completed with test failures. Please review Allure and HTML reports.'
+        }
+
+        failure {
+            echo 'Automation pipeline failed due to infrastructure or Jenkins execution issue.'
         }
     }
 }
