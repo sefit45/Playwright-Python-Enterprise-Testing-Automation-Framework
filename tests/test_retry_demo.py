@@ -2,8 +2,8 @@
 import pytest
 
 
-# Demo marker
-# This test is used only to demonstrate retry mechanism behavior
+# Demo test used only to demonstrate retry behavior
+# This test intentionally fails and should be excluded from normal CI execution
 @pytest.mark.demo
 @pytest.mark.regression
 def test_retry_demo_failure():
@@ -15,5 +15,5 @@ def test_retry_demo_failure():
     actual_value = 5
 
     # This assertion intentionally fails
-    # This test should not run in normal CI regression execution
+    # CI excludes this test using: not demo
     assert actual_value == expected_value
