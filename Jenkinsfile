@@ -42,21 +42,22 @@ pipeline {
                     echo "Raw ENV input: '${envInput}'"
                     echo "Raw TEST_SUITE input: '${suiteInput}'"
 
-                    // 🔥 USE TEMP VARIABLES (CRITICAL FIX)
                     def resolvedEnv = "dev"
                     def resolvedMarker = "smoke"
 
-                    // ENV mapping
-                    if (envInput == "st") {
+                    // 🔥 ENV FIX — ONLY CONTAINS
+                    if (envInput.contains("st")) {
                         resolvedEnv = "st"
-                    } else if (envInput == "uat") {
+                    } else if (envInput.contains("uat")) {
                         resolvedEnv = "uat"
                     } else if (envInput.contains("prod")) {
                         resolvedEnv = "prod"
                     }
 
-                    // SUITE mapping
+                    // 🔥 SUITE FIX — ONLY CONTAINS
                     if (suiteInput.contains("regression")) {
+                        resolvedMarker = "regression"
+                    } else if (suiteInput.contains("progression")) {
                         resolvedMarker = "regression"
                     } else if (suiteInput.contains("api")) {
                         resolvedMarker = "api"
@@ -68,7 +69,6 @@ pipeline {
                         resolvedMarker = "sanity"
                     }
 
-                    // 🔥 SET ENV ONLY ONCE
                     env.SELECTED_ENV = resolvedEnv
                     env.SELECTED_MARKER = resolvedMarker
 
