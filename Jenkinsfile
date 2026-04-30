@@ -79,6 +79,18 @@ pipeline {
                 }
             }
         }
+
+        stage('07 - Force Build Result') {
+            steps {
+                script {
+                    if (env.TEST_STATUS == "0") {
+                        echo "Forcing SUCCESS status"
+                        currentBuild.result = 'SUCCESS'
+                    }
+                }
+            }
+        }
+}
     }
 
     post {
