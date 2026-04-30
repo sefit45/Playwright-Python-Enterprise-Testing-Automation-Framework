@@ -7,6 +7,7 @@
 // - GitHub checkout
 // - Dynamic environment selection
 // - Dynamic test suite selection
+// - Clean parameter mapping using Maps
 // - Dependency installation
 // - Playwright browser installation
 // - Parallel pytest execution
@@ -68,41 +69,33 @@ pipeline {
             steps {
                 script {
 
-                    // Convert Jenkins environment selection into framework environment value
-                    if (params.ENV == 'Dev') {
-                        env.SELECTED_ENV = 'dev'
-                    } else if (params.ENV == 'ST') {
-                        env.SELECTED_ENV = 'qa'
-                    } else if (params.ENV == 'UAT') {
-                        env.SELECTED_ENV = 'qa'
-                    } else if (params.ENV == 'PROD-Like') {
-                        env.SELECTED_ENV = 'prod'
-                    } else if (params.ENV == 'PROD') {
-                        env.SELECTED_ENV = 'prod'
-                    } else {
-                        env.SELECTED_ENV = 'dev'
-                    }
+                    // Map Jenkins environment selection to framework environment value
+                    def envMap = [
+                        'Dev'      : 'dev',
+                        'ST'       : 'qa',
+                        'UAT'      : 'qa',
+                        'PROD-Like': 'prod',
+                        'PROD'     : 'prod'
+                    ]
 
-                    // Convert Jenkins test suite selection into pytest marker
-                    if (params.TEST_SUITE == 'Minimal Connectivity Tests - MCT') {
-                        env.SELECTED_MARKER = 'smoke'
-                    } else if (params.TEST_SUITE == 'Sanity Tests') {
-                        env.SELECTED_MARKER = 'sanity'
-                    } else if (params.TEST_SUITE == 'Progression Tests') {
-                        env.SELECTED_MARKER = 'regression'
-                    } else if (params.TEST_SUITE == 'Regression Tests') {
-                        env.SELECTED_MARKER = 'regression'
-                    } else if (params.TEST_SUITE == 'APIs Tests') {
-                        env.SELECTED_MARKER = 'api'
-                    } else if (params.TEST_SUITE == 'DB Tests') {
-                        env.SELECTED_MARKER = 'db'
-                    } else if (params.TEST_SUITE == 'UI Tests') {
-                        env.SELECTED_MARKER = 'ui'
-                    } else {
-                        env.SELECTED_MARKER = 'smoke'
-                    }
+                    // Map Jenkins test suite selection to pytest marker
+                    def suiteMap = [
+                        'Minimal Connectivity Tests - MCT': 'smoke',
+                        'Sanity Tests'                   : 'sanity',
+                        'Progression Tests'              : 'regression',
+                        'Regression Tests'               : 'regression',
+                        'APIs Tests'                     : 'api',
+                        'DB Tests'                       : 'db',
+                        'UI Tests'                       : 'ui'
+                    ]
 
-                    // Print final resolved execution configuration
+                    // Resolve selected environment with safe default value
+                    env.SELECTED_ENV = envMap[params.ENV] ?: 'dev'
+
+                    // Resolve selected test marker with safe default value
+                    env.SELECTED_MARKER = suiteMap[params.TEST_SUITE] ?: 'smoke'
+
+                    // Print selected execution configuration
                     echo "Selected Jenkins ENV parameter: ${params.ENV}"
                     echo "Selected Jenkins TEST_SUITE parameter: ${params.TEST_SUITE}"
                     echo "Resolved framework environment: ${env.SELECTED_ENV}"
