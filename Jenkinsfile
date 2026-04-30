@@ -68,14 +68,15 @@ pipeline {
         stage('06 - Final Build Decision') {
             steps {
                 script {
-
                     echo "Final decision based on TEST_STATUS=${env.TEST_STATUS}"
 
+                    currentBuild.result = null
+
                     if (env.TEST_STATUS == "0") {
-                        echo "✔ Tests passed → forcing SUCCESS"
+                        echo "Tests passed - forcing SUCCESS"
                         currentBuild.result = 'SUCCESS'
                     } else {
-                        echo "❌ Tests failed → marking UNSTABLE"
+                        echo "Tests failed - marking UNSTABLE"
                         currentBuild.result = 'UNSTABLE'
                     }
                 }
@@ -89,15 +90,15 @@ pipeline {
         }
 
         success {
-            echo '✅ SUCCESS - Clean execution'
+            echo 'SUCCESS - Clean execution'
         }
 
         unstable {
-            echo '⚠️ UNSTABLE - Tests failed but pipeline completed'
+            echo 'UNSTABLE - Tests failed but pipeline completed'
         }
 
         failure {
-            echo '💥 FAILURE - Infrastructure issue'
+            echo 'FAILURE - Infrastructure issue'
         }
     }
 }
