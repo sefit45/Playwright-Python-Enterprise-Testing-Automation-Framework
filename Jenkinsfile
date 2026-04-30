@@ -36,38 +36,31 @@ pipeline {
 
                     echo "ALL PARAMS: ${params}"
 
+                    // 🔥 Normalize
                     def envInput = params.ENV.toString().trim().toLowerCase()
                     def suiteInput = params.TEST_SUITE.toString().trim().toLowerCase()
 
-                    echo "Raw ENV input: '${envInput}'"
-                    echo "Raw TEST_SUITE input: '${suiteInput}'"
+                    echo "ENV INPUT = ${envInput}"
+                    echo "SUITE INPUT = ${suiteInput}"
 
-                    def resolvedEnv = "dev"
-                    def resolvedMarker = "smoke"
+                    // 🔥 MAP BASED (NO IF AT ALL)
+                    def envMap = [
+                        "st" : "st",
+                        "uat": "uat",
+                        "prod": "prod"
+                    ]
 
-                    // 🔥 ENV FIX — ONLY CONTAINS
-                    if (envInput.contains("st")) {
-                        resolvedEnv = "st"
-                    } else if (envInput.contains("uat")) {
-                        resolvedEnv = "uat"
-                    } else if (envInput.contains("prod")) {
-                        resolvedEnv = "prod"
-                    }
+                    def suiteMap = [
+                        "regression tests" : "regression",
+                        "progression tests": "regression",
+                        "apis tests"      : "api",
+                        "db tests"        : "db",
+                        "ui tests"        : "ui",
+                        "sanity tests"    : "sanity"
+                    ]
 
-                    // 🔥 SUITE FIX — ONLY CONTAINS
-                    if (suiteInput.contains("regression")) {
-                        resolvedMarker = "regression"
-                    } else if (suiteInput.contains("progression")) {
-                        resolvedMarker = "regression"
-                    } else if (suiteInput.contains("api")) {
-                        resolvedMarker = "api"
-                    } else if (suiteInput.contains("db")) {
-                        resolvedMarker = "db"
-                    } else if (suiteInput.contains("ui")) {
-                        resolvedMarker = "ui"
-                    } else if (suiteInput.contains("sanity")) {
-                        resolvedMarker = "sanity"
-                    }
+                    def resolvedEnv = envMap.get(envInput, "dev")
+                    def resolvedMarker = suiteMap.get(suiteInput, "smoke")
 
                     env.SELECTED_ENV = resolvedEnv
                     env.SELECTED_MARKER = resolvedMarker
