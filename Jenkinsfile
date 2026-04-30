@@ -24,7 +24,6 @@ pipeline {
         stage('02 - Install Dependencies') {
             steps {
                 echo 'Installing dependencies...'
-
                 bat "\"%PYTHON%\" -m pip install --upgrade pip"
                 bat "\"%PIP%\" install -r requirements.txt"
                 bat "\"%PLAYWRIGHT%\" install"
@@ -35,47 +34,43 @@ pipeline {
             steps {
                 script {
 
-                    // Print all Jenkins parameters for debugging
                     echo "ALL PARAMS: ${params}"
 
-                    // Read Jenkins parameters by exact names
-                    def rawEnv = params.ENV ?: "Dev"
-                    def rawSuite = params.TEST_SUITE ?: "Minimal Connectivity Tests - MCT"
-
-                    // Normalize input values
-                    def envInput = rawEnv.toString().trim().toLowerCase()
-                    def suiteInput = rawSuite.toString().trim().toLowerCase()
+                    def envInput = params.ENV.toString().trim().toLowerCase()
+                    def suiteInput = params.TEST_SUITE.toString().trim().toLowerCase()
 
                     echo "Raw ENV input: '${envInput}'"
                     echo "Raw TEST_SUITE input: '${suiteInput}'"
 
-                    // Resolve environment
+                    // 🔥 USE TEMP VARIABLES (CRITICAL FIX)
+                    def resolvedEnv = "dev"
+                    def resolvedMarker = "smoke"
+
+                    // ENV mapping
                     if (envInput == "st") {
-                        env.SELECTED_ENV = "st"
+                        resolvedEnv = "st"
                     } else if (envInput == "uat") {
-                        env.SELECTED_ENV = "uat"
+                        resolvedEnv = "uat"
                     } else if (envInput.contains("prod")) {
-                        env.SELECTED_ENV = "prod"
-                    } else {
-                        env.SELECTED_ENV = "dev"
+                        resolvedEnv = "prod"
                     }
 
-                    // Resolve test marker
+                    // SUITE mapping
                     if (suiteInput.contains("regression")) {
-                        env.SELECTED_MARKER = "regression"
-                    } else if (suiteInput.contains("progression")) {
-                        env.SELECTED_MARKER = "regression"
+                        resolvedMarker = "regression"
                     } else if (suiteInput.contains("api")) {
-                        env.SELECTED_MARKER = "api"
+                        resolvedMarker = "api"
                     } else if (suiteInput.contains("db")) {
-                        env.SELECTED_MARKER = "db"
+                        resolvedMarker = "db"
                     } else if (suiteInput.contains("ui")) {
-                        env.SELECTED_MARKER = "ui"
+                        resolvedMarker = "ui"
                     } else if (suiteInput.contains("sanity")) {
-                        env.SELECTED_MARKER = "sanity"
-                    } else {
-                        env.SELECTED_MARKER = "smoke"
+                        resolvedMarker = "sanity"
                     }
+
+                    // 🔥 SET ENV ONLY ONCE
+                    env.SELECTED_ENV = resolvedEnv
+                    env.SELECTED_MARKER = resolvedMarker
 
                     echo "Resolved ENV: ${env.SELECTED_ENV}"
                     echo "Resolved MARKER: ${env.SELECTED_MARKER}"
@@ -87,7 +82,6 @@ pipeline {
             steps {
                 script {
 
-                    // Run pytest in parallel and exclude demo tests from CI
                     def exitCode = bat(
                         script: "\"%PYTEST%\" -n auto -m \"%SELECTED_MARKER% and not demo\" --env=%SELECTED_ENV% --alluredir=allure-results",
                         returnStatus: true
@@ -132,18 +126,6 @@ pipeline {
     post {
         always {
             echo 'Pipeline finished.'
-        }
-
-        success {
-            echo 'Automation pipeline completed successfully.'
-        }
-
-        unstable {
-            echo 'Automation pipeline completed with test failures. Please review Allure and HTML reports.'
-        }
-
-        failure {
-            echo 'Automation pipeline failed due to infrastructure or Jenkins execution issue.'
         }
     }
 }
