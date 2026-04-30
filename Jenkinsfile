@@ -12,6 +12,8 @@ pipeline {
         PIP = "C:\\Users\\sefit\\playwright-python-framework\\venv\\Scripts\\pip.exe"
         PYTEST = "C:\\Users\\sefit\\playwright-python-framework\\venv\\Scripts\\pytest.exe"
         PLAYWRIGHT = "C:\\Users\\sefit\\playwright-python-framework\\venv\\Scripts\\playwright.exe"
+
+        TEST_STATUS = "0"
     }
 
     stages {
@@ -42,11 +44,8 @@ pipeline {
                         returnStatus: true
                     )
 
-                    echo "Pytest exit code: ${exitCode}"
-
-                    if (exitCode != 0) {
-                        error("Tests failed. Check Allure and HTML reports.")
-                    }
+                    env.TEST_STATUS = exitCode.toString()
+                    echo "Pytest exit code: ${env.TEST_STATUS}"
                 }
             }
         }
@@ -65,6 +64,19 @@ pipeline {
             steps {
                 archiveArtifacts artifacts: 'report.html', allowEmptyArchive: true
                 archiveArtifacts artifacts: 'allure-results/**', allowEmptyArchive: true
+            }
+        }
+
+        stage('06 - Evaluate Test Results') {
+            steps {
+                script {
+                    if (env.TEST_STATUS != "0") {
+                        error("Tests failed. Reports were generated successfully.")
+                    } else {
+                        currentBuild.result = 'SUCCESS'
+                        echo "All selected tests passed successfully."
+                    }
+                }
             }
         }
     }
