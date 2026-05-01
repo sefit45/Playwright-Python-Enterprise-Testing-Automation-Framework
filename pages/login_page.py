@@ -3,7 +3,6 @@ from playwright.sync_api import Page
 
 
 # Page Object class for the Login screen
-# Here we centralize all elements and actions of the login page
 class LoginPage:
 
     # Constructor function - runs automatically when creating the class object

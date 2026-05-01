@@ -1,6 +1,18 @@
 {
-  "dev": "https://jsonplaceholder.typicode.com",
-  "st": "https://jsonplaceholder.typicode.com",
-  "uat": "https://jsonplaceholder.typicode.com",
-  "prod": "https://jsonplaceholder.typicode.com"
+    "dev": {
+        "api_base_url": "https://jsonplaceholder.typicode.com",
+        "ui_base_url": "https://the-internet.herokuapp.com"
+    },
+    "st": {
+        "api_base_url": "https://jsonplaceholder.typicode.com",
+        "ui_base_url": "https://the-internet.herokuapp.com"
+    },
+    "uat": {
+        "api_base_url": "https://jsonplaceholder.typicode.com",
+        "ui_base_url": "https://the-internet.herokuapp.com"
+    },
+    "prod": {
+        "api_base_url": "https://jsonplaceholder.typicode.com",
+        "ui_base_url": "https://the-internet.herokuapp.com"
+    }
 }
