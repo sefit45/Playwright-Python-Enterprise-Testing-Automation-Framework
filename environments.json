@@ -1,18 +1,22 @@
 {
     "dev": {
         "api_base_url": "https://jsonplaceholder.typicode.com",
-        "ui_base_url": "https://the-internet.herokuapp.com"
+        "ui_base_url": "https://the-internet.herokuapp.com",
+        "auth_token": "dev-demo-token"
     },
     "st": {
         "api_base_url": "https://jsonplaceholder.typicode.com",
-        "ui_base_url": "https://the-internet.herokuapp.com"
+        "ui_base_url": "https://the-internet.herokuapp.com",
+        "auth_token": "st-demo-token"
     },
     "uat": {
         "api_base_url": "https://jsonplaceholder.typicode.com",
-        "ui_base_url": "https://the-internet.herokuapp.com"
+        "ui_base_url": "https://the-internet.herokuapp.com",
+        "auth_token": "uat-demo-token"
     },
     "prod": {
         "api_base_url": "https://jsonplaceholder.typicode.com",
-        "ui_base_url": "https://the-internet.herokuapp.com"
+        "ui_base_url": "https://the-internet.herokuapp.com",
+        "auth_token": "prod-demo-token"
     }
 }
