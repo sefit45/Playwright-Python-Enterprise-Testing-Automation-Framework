@@ -1,44 +1,80 @@
+# ========================
 # Python virtual environment
+# ========================
 venv/
 .venv/
+env/
 
+# ========================
 # Python cache files
+# ========================
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
 *.pyd
 
+# ========================
 # Pytest cache
+# ========================
 .pytest_cache/
 
-# Playwright cache
+# ========================
+# Playwright artifacts
+# ========================
 playwright/.cache/
+test-results/
+trace.zip
+*.zip
 
+# ========================
 # Allure reports
+# ========================
 allure-results/
 allure-report/
 
+# ========================
 # HTML reports
+# ========================
 report.html
 
+# ========================
 # Logs
+# ========================
 logs/
 *.log
 
-# Screenshots
+# ========================
+# Screenshots / Videos
+# ========================
 screenshots/
+videos/
 
-# Environment files (contains secrets)
+# ========================
+# Coverage reports (future)
+# ========================
+.coverage
+htmlcov/
+
+# ========================
+# Environment files (secrets)
+# ========================
 .env
+.env.*
 
-# Local database files
+# ========================
+# Local databases
+# ========================
 *.db
 *.sqlite3
 
+# ========================
 # IDE files
+# ========================
 .vscode/
 .idea/
 
+# ========================
 # OS files
+# ========================
 .DS_Store
 Thumbs.db
