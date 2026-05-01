@@ -1,15 +1,23 @@
+# Import pytest for test markers
 import pytest
+
+# Import Allure for reporting
 import allure
 
+# Import custom validation utilities
 from API_Tests.assertions import (
     validate_status_code,
     validate_json_field,
     validate_field_exists
 )
 
+# Import logger for execution logs
 from utils.logger import logger
 
 
+# =========================================================
+# Test: Get existing user
+# =========================================================
 @allure.feature("User API")
 @allure.story("Get existing user")
 @allure.title("Validate successful retrieval of an existing user by ID")
@@ -19,34 +27,30 @@ from utils.logger import logger
 @pytest.mark.regression
 def test_get_single_user(api_client, test_data):
 
+    # Get test data from JSON
     user_id = test_data["api_tests"]["get_single_user"]["user_id"]
 
-    with allure.step(f"Send GET request for user ID: {user_id}"):
-        logger.info("Starting test_get_single_user")
-        response = api_client.get_single_user(user_id)
+    # Log test start
+    logger.info("Starting test_get_single_user")
 
-    with allure.step("Attach API response"):
-        allure.attach(
-            response.text(),
-            name="GET Single User Response",
-            attachment_type=allure.attachment_type.JSON
-        )
+    # Send GET request via API client
+    response = api_client.get_single_user(user_id)
 
-    with allure.step("Validate status code is 200"):
-        validate_status_code(response, 200)
+    # Validate status code
+    validate_status_code(response, 200)
 
+    # Convert response to JSON
     response_body = response.json()
 
-    with allure.step("Validate returned user ID"):
-        validate_json_field(response_body, "id", user_id)
-
-    with allure.step("Validate username exists"):
-        validate_field_exists(response_body, "username")
-
-    with allure.step("Validate email exists"):
-        validate_field_exists(response_body, "email")
+    # Validate response fields
+    validate_json_field(response_body, "id", user_id)
+    validate_field_exists(response_body, "username")
+    validate_field_exists(response_body, "email")
 
 
+# =========================================================
+# Test: Get non-existing user
+# =========================================================
 @allure.feature("User API")
 @allure.story("Get non-existing user")
 @allure.title("Validate 404 response for non-existing user")
@@ -56,23 +60,22 @@ def test_get_single_user(api_client, test_data):
 @pytest.mark.regression
 def test_get_non_existing_user(api_client):
 
+    # Define non-existing user ID
     non_existing_user_id = 99999
 
-    with allure.step(f"Send GET request for non-existing user ID: {non_existing_user_id}"):
-        logger.info("Starting test_get_non_existing_user")
-        response = api_client.get_single_user(non_existing_user_id)
+    # Log test start
+    logger.info("Starting test_get_non_existing_user")
 
-    with allure.step("Attach API response"):
-        allure.attach(
-            response.text(),
-            name="GET Non Existing User Response",
-            attachment_type=allure.attachment_type.JSON
-        )
+    # Send GET request
+    response = api_client.get_single_user(non_existing_user_id)
 
-    with allure.step("Validate status code is 404"):
-        validate_status_code(response, 404)
+    # Validate 404 response
+    validate_status_code(response, 404)
 
 
+# =========================================================
+# Test: Create new post
+# =========================================================
 @allure.feature("Post API")
 @allure.story("Create new post")
 @allure.title("Validate successful creation of a new post")
@@ -80,50 +83,32 @@ def test_get_non_existing_user(api_client):
 @pytest.mark.smoke
 @pytest.mark.api
 @pytest.mark.regression
-def test_create_post(api_client):
+def test_create_post(api_client, test_data):
 
-    title = "QA Automation"
-    body = "Playwright API test"
-    user_id = 1
+    # Get test data from JSON
+    post_data = test_data["api_tests"]["create_post"]
 
-    payload = {
-        "title": title,
-        "body": body,
-        "userId": user_id
-    }
+    title = post_data["title"]
+    body = post_data["body"]
+    user_id = post_data["user_id"]
 
-    with allure.step("Attach request payload"):
-        allure.attach(
-            str(payload),
-            name="POST Request Payload",
-            attachment_type=allure.attachment_type.JSON
-        )
+    # Log test start
+    logger.info("Starting test_create_post")
 
-    with allure.step("Send POST request"):
-        logger.info("Starting test_create_post")
-        response = api_client.create_post(
-            title=title,
-            body=body,
-            user_id=user_id
-        )
+    # Send POST request via API client
+    response = api_client.create_post(
+        title=title,
+        body=body,
+        user_id=user_id
+    )
 
-    with allure.step("Attach API response"):
-        allure.attach(
-            response.text(),
-            name="POST Response",
-            attachment_type=allure.attachment_type.JSON
-        )
+    # Validate status code
+    validate_status_code(response, 201)
 
-    with allure.step("Validate status code is 201"):
-        validate_status_code(response, 201)
-
+    # Convert response to JSON
     response_body = response.json()
 
-    with allure.step("Validate returned title"):
-        validate_json_field(response_body, "title", title)
-
-    with allure.step("Validate returned body"):
-        validate_json_field(response_body, "body", body)
-
-    with allure.step("Validate returned user ID"):
-        validate_json_field(response_body, "userId", user_id)
+    # Validate response fields
+    validate_json_field(response_body, "title", title)
+    validate_json_field(response_body, "body", body)
+    validate_json_field(response_body, "userId", user_id)
