@@ -2,21 +2,33 @@
     "dev": {
         "api_base_url": "https://jsonplaceholder.typicode.com",
         "ui_base_url": "https://the-internet.herokuapp.com",
-        "auth_token": "dev-demo-token"
+        "auth_base_url": "https://reqres.in",
+        "reqres_api_key": "demo-api-key",
+        "auth_email": "eve.holt@reqres.in",
+        "auth_password": "cityslicka"
     },
     "st": {
         "api_base_url": "https://jsonplaceholder.typicode.com",
         "ui_base_url": "https://the-internet.herokuapp.com",
-        "auth_token": "st-demo-token"
+        "auth_base_url": "https://reqres.in",
+        "reqres_api_key": "demo-api-key",
+        "auth_email": "eve.holt@reqres.in",
+        "auth_password": "cityslicka"
     },
     "uat": {
         "api_base_url": "https://jsonplaceholder.typicode.com",
         "ui_base_url": "https://the-internet.herokuapp.com",
-        "auth_token": "uat-demo-token"
+        "auth_base_url": "https://reqres.in",
+        "reqres_api_key": "demo-api-key",
+        "auth_email": "eve.holt@reqres.in",
+        "auth_password": "cityslicka"
     },
     "prod": {
         "api_base_url": "https://jsonplaceholder.typicode.com",
         "ui_base_url": "https://the-internet.herokuapp.com",
-        "auth_token": "prod-demo-token"
+        "auth_base_url": "https://reqres.in",
+        "reqres_api_key": "demo-api-key",
+        "auth_email": "eve.holt@reqres.in",
+        "auth_password": "cityslicka"
     }
 }

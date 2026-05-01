@@ -10,6 +10,9 @@ import allure
 # Import APIClient class for API testing
 from API_Tests.api_client import APIClient
 
+# Import AuthClient class for authentication testing
+from API_Tests.auth_client import AuthClient
+
 # Import LoginPage class for UI testing
 from pages.login_page import LoginPage
 
@@ -64,23 +67,69 @@ def ui_base_url(env_config):
     return env_config["ui_base_url"]
 
 
-# Fixture: authentication token
+# Fixture: Auth base URL
 @pytest.fixture(scope="session")
-def auth_token(env_config):
+def auth_base_url(env_config):
 
-    # Return authentication token from selected environment
-    return env_config.get("auth_token")
+    # Return auth base URL from selected environment
+    return env_config["auth_base_url"]
+
+
+# Fixture: ReqRes API key
+@pytest.fixture(scope="session")
+def reqres_api_key(env_config):
+
+    # Return ReqRes API key from selected environment
+    return env_config["reqres_api_key"]
+
+
+# Fixture: Auth email
+@pytest.fixture(scope="session")
+def auth_email(env_config):
+
+    # Return auth email from selected environment
+    return env_config["auth_email"]
+
+
+# Fixture: Auth password
+@pytest.fixture(scope="session")
+def auth_password(env_config):
+
+    # Return auth password from selected environment
+    return env_config["auth_password"]
 
 
 # Fixture: API client
 @pytest.fixture(scope="session")
-def api_client(playwright, api_base_url, auth_token):
+def api_client(playwright, api_base_url):
 
-    # Create APIClient with Playwright, base URL and auth token
+    # Create APIClient for public demo API
     return APIClient(
         playwright=playwright,
-        base_url=api_base_url,
-        token=auth_token
+        base_url=api_base_url
+    )
+
+
+# Fixture: Auth client
+@pytest.fixture(scope="session")
+def auth_client(playwright, auth_base_url, reqres_api_key):
+
+    # Create AuthClient for authentication API
+    return AuthClient(
+        playwright=playwright,
+        auth_base_url=auth_base_url,
+        api_key=reqres_api_key
+    )
+
+
+# Fixture: JWT token
+@pytest.fixture(scope="session")
+def jwt_token(auth_client, auth_email, auth_password):
+
+    # Login through API/mock auth and return JWT token
+    return auth_client.login_and_get_token(
+        email=auth_email,
+        password=auth_password
     )
 
 
@@ -90,6 +139,25 @@ def login_page(page):
 
     # Create LoginPage object
     return LoginPage(page)
+
+
+# Fixture: Authenticated page with JWT injected into localStorage
+@pytest.fixture
+def authenticated_page(page, ui_base_url, jwt_token):
+
+    # Open UI base URL before setting localStorage
+    page.goto(ui_base_url)
+
+    # Inject JWT token into browser localStorage
+    page.evaluate(
+        """(token) => {
+            localStorage.setItem("auth_token", token);
+        }""",
+        jwt_token
+    )
+
+    # Return browser page with injected token
+    return page
 
 
 # Fixture: test data
