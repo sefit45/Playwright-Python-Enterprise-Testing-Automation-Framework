@@ -12,20 +12,21 @@ pipeline {
         PIP = "C:\\Users\\sefit\\playwright-python-framework\\venv\\Scripts\\pip.exe"
         PYTEST = "C:\\Users\\sefit\\playwright-python-framework\\venv\\Scripts\\pytest.exe"
         PLAYWRIGHT = "C:\\Users\\sefit\\playwright-python-framework\\venv\\Scripts\\playwright.exe"
+
         TEST_EXIT_CODE = "0"
+        USE_DOCKER = "true"
     }
 
     stages {
 
-        stage('01 - Checkout Source Code') {
+        stage('01 - Checkout') {
             steps {
                 checkout scm
             }
         }
 
-        stage('02 - Clean Previous Results') {
+        stage('02 - Clean') {
             steps {
-                echo 'Cleaning previous reports and execution artifacts...'
                 bat """
                 if exist allure-results rmdir /s /q allure-results
                 if exist report.html del /q report.html
@@ -39,19 +40,44 @@ pipeline {
             }
         }
 
-        stage('03 - Install Dependencies') {
+        stage('03 - Try Docker Execution') {
             steps {
-                echo 'Installing dependencies...'
-                bat "\"${env.PYTHON}\" -m pip install --upgrade pip"
-                bat "\"${env.PIP}\" install -r requirements.txt"
-                bat "\"${env.PLAYWRIGHT}\" install"
+                script {
+                    try {
+                        echo "Building Docker image..."
+
+                        bat "docker build -t qa-framework ."
+
+                        echo "Running tests inside Docker..."
+
+                        def exitCode = bat(
+                            script: "docker run --rm qa-framework",
+                            returnStatus: true
+                        )
+
+                        env.TEST_EXIT_CODE = "${exitCode}"
+
+                        echo "Docker execution finished with exit code: ${env.TEST_EXIT_CODE}"
+
+                    } catch (Exception e) {
+                        echo "Docker failed, switching to fallback venv execution"
+                        env.USE_DOCKER = "false"
+                    }
+                }
             }
         }
 
-        stage('04 - Execute Tests') {
+        stage('04 - Fallback Venv Execution') {
+            when {
+                expression { env.USE_DOCKER == "false" }
+            }
             steps {
                 script {
-                    echo "Running tests with ENV=${params.ENV} and TEST_SUITE=${params.TEST_SUITE}"
+                    echo "Running fallback using local venv..."
+
+                    bat "\"${env.PYTHON}\" -m pip install --upgrade pip"
+                    bat "\"${env.PIP}\" install -r requirements.txt"
+                    bat "\"${env.PLAYWRIGHT}\" install"
 
                     def exitCode = bat(
                         script: "\"${env.PYTEST}\" -n auto -m \"${params.TEST_SUITE} and not demo\" --env=${params.ENV} --alluredir=allure-results",
@@ -60,32 +86,26 @@ pipeline {
 
                     env.TEST_EXIT_CODE = "${exitCode}"
 
-                    echo "Pytest exit code: ${env.TEST_EXIT_CODE}"
+                    echo "Fallback execution exit code: ${env.TEST_EXIT_CODE}"
                 }
             }
         }
 
-        stage('05 - Add Allure Environment Info') {
+        stage('05 - Add Allure Info') {
             steps {
-                echo 'Adding environment details to Allure report...'
                 bat """
-                if not exist allure-results mkdir allure-results
-
                 echo Environment=${params.ENV}> allure-results\\environment.properties
                 echo Test_Suite=${params.TEST_SUITE}>> allure-results\\environment.properties
                 echo Executor=Jenkins>> allure-results\\environment.properties
                 echo Build_Number=%BUILD_NUMBER%>> allure-results\\environment.properties
                 echo Job_Name=%JOB_NAME%>> allure-results\\environment.properties
                 echo Build_URL=%BUILD_URL%>> allure-results\\environment.properties
-                echo Git_Branch=%GIT_BRANCH%>> allure-results\\environment.properties
-                echo Git_Commit=%GIT_COMMIT%>> allure-results\\environment.properties
                 """
             }
         }
 
-        stage('06 - Publish Allure Report') {
+        stage('06 - Allure Report') {
             steps {
-                echo 'Publishing Allure report...'
                 allure([
                     includeProperties: false,
                     jdk: '',
@@ -94,9 +114,8 @@ pipeline {
             }
         }
 
-        stage('07 - Archive Reports And Logs') {
+        stage('07 - Archive') {
             steps {
-                echo 'Archiving reports, logs and screenshots...'
                 archiveArtifacts artifacts: 'report.html', allowEmptyArchive: true
                 archiveArtifacts artifacts: 'allure-results/**', allowEmptyArchive: true
                 archiveArtifacts artifacts: 'logs/**', allowEmptyArchive: true
@@ -104,30 +123,16 @@ pipeline {
             }
         }
 
-        stage('08 - Final Build Status') {
+        stage('08 - Final Status') {
             steps {
                 script {
                     if (env.TEST_EXIT_CODE != "0") {
-                        error("Tests failed. Build marked as FAILURE after reports were generated and archived.")
+                        error("Tests failed")
                     } else {
-                        echo "All tests passed successfully."
+                        echo "All tests passed successfully"
                     }
                 }
             }
-        }
-    }
-
-    post {
-        always {
-            echo 'Pipeline finished.'
-        }
-
-        success {
-            echo 'SUCCESS - Clean execution'
-        }
-
-        failure {
-            echo 'FAILURE - Tests or pipeline failed'
         }
     }
 }
