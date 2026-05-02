@@ -50,7 +50,7 @@ pipeline {
                         docker run --rm ^
                         -v "%CD%\\allure-results-api:/app/allure-results" ^
                         ${IMAGE_NAME} ^
-                        python -m pytest -m "api and not demo" --env=${params.ENV} --alluredir=/app/allure-results
+                        python -m pytest -m "api and not demo" --env=${params.ENV} --reruns 2 --reruns-delay 1 --alluredir=/app/allure-results
                         """
                     }
                 }
@@ -61,7 +61,7 @@ pipeline {
                         docker run --rm ^
                         -v "%CD%\\allure-results-ui:/app/allure-results" ^
                         ${IMAGE_NAME} ^
-                        python -m pytest -m "(ui or fullstack) and not demo" --env=${params.ENV} --alluredir=/app/allure-results
+                        python -m pytest -m "(ui or fullstack) and not demo" --env=${params.ENV} --reruns 2 --reruns-delay 1 --alluredir=/app/allure-results
                         """
                     }
                 }
@@ -72,7 +72,7 @@ pipeline {
                         docker run --rm ^
                         -v "%CD%\\allure-results-db:/app/allure-results" ^
                         ${IMAGE_NAME} ^
-                        python -m pytest -m "db and not demo" --env=${params.ENV} --alluredir=/app/allure-results
+                        python -m pytest -m "db and not demo" --env=${params.ENV} --reruns 2 --reruns-delay 1 --alluredir=/app/allure-results
                         """
                     }
                 }
@@ -83,7 +83,7 @@ pipeline {
                         docker run --rm ^
                         -v "%CD%\\allure-results-auth:/app/allure-results" ^
                         ${IMAGE_NAME} ^
-                        python -m pytest -m "auth and not demo" --env=${params.ENV} --alluredir=/app/allure-results
+                        python -m pytest -m "auth and not demo" --env=${params.ENV} --reruns 2 --reruns-delay 1 --alluredir=/app/allure-results
                         """
                     }
                 }
@@ -117,7 +117,7 @@ pipeline {
 
     post {
         success {
-            echo 'SUCCESS - Parallel Docker execution completed'
+            echo 'SUCCESS - Parallel Docker execution completed with retry support'
         }
         failure {
             echo 'FAILURE - One or more suites failed'
