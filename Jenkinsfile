@@ -7,7 +7,7 @@ pipeline {
     }
 
     environment {
-        IMAGE_NAME = "qa-framework"
+        IMAGE_NAME = "sefit1976/qa-framework:latest"
     }
 
     stages {
@@ -46,9 +46,9 @@ pipeline {
             }
         }
 
-        stage('03 - Build Docker Image') {
+        stage('03 - Pull Docker Image') {
             steps {
-                bat "docker build -t ${IMAGE_NAME} ."
+                bat "docker pull ${IMAGE_NAME}"
             }
         }
 
