@@ -21,12 +21,15 @@ pipeline {
         stage('02 - Clean') {
             steps {
                 bat """
-                if exist allure-results rmdir /s /q allure-results
-                if exist report.html del /q report.html
-                if exist logs rmdir /s /q logs
-                if exist screenshots rmdir /s /q screenshots
+                if exist allure-results-api rmdir /s /q allure-results-api
+                if exist allure-results-ui rmdir /s /q allure-results-ui
+                if exist allure-results-db rmdir /s /q allure-results-db
+                if exist allure-results-auth rmdir /s /q allure-results-auth
 
-                mkdir allure-results
+                mkdir allure-results-api
+                mkdir allure-results-ui
+                mkdir allure-results-db
+                mkdir allure-results-auth
                 """
             }
         }
@@ -38,53 +41,49 @@ pipeline {
             }
         }
 
-        stage('04 - Parallel Execution') {
+        stage('04 - Parallel Docker Execution') {
             parallel {
 
                 stage('API Tests') {
                     steps {
-                        echo "Running API tests..."
                         bat """
                         docker run --rm ^
-                        -e ENV=${params.ENV} ^
+                        -v "%CD%\\allure-results-api:/app/allure-results" ^
                         ${IMAGE_NAME} ^
-                        python -m pytest -m "api and not demo" --env=${params.ENV} --alluredir=allure-results
+                        python -m pytest -m "api and not demo" --env=${params.ENV} --alluredir=/app/allure-results
                         """
                     }
                 }
 
                 stage('UI + FullStack Tests') {
                     steps {
-                        echo "Running UI & FullStack tests..."
                         bat """
                         docker run --rm ^
-                        -e ENV=${params.ENV} ^
+                        -v "%CD%\\allure-results-ui:/app/allure-results" ^
                         ${IMAGE_NAME} ^
-                        python -m pytest -m "(ui or fullstack) and not demo" --env=${params.ENV} --alluredir=allure-results
+                        python -m pytest -m "(ui or fullstack) and not demo" --env=${params.ENV} --alluredir=/app/allure-results
                         """
                     }
                 }
 
                 stage('DB Tests') {
                     steps {
-                        echo "Running DB tests..."
                         bat """
                         docker run --rm ^
-                        -e ENV=${params.ENV} ^
+                        -v "%CD%\\allure-results-db:/app/allure-results" ^
                         ${IMAGE_NAME} ^
-                        python -m pytest -m "db and not demo" --env=${params.ENV} --alluredir=allure-results
+                        python -m pytest -m "db and not demo" --env=${params.ENV} --alluredir=/app/allure-results
                         """
                     }
                 }
 
                 stage('Auth Tests') {
                     steps {
-                        echo "Running Auth tests..."
                         bat """
                         docker run --rm ^
-                        -e ENV=${params.ENV} ^
+                        -v "%CD%\\allure-results-auth:/app/allure-results" ^
                         ${IMAGE_NAME} ^
-                        python -m pytest -m "auth and not demo" --env=${params.ENV} --alluredir=allure-results
+                        python -m pytest -m "auth and not demo" --env=${params.ENV} --alluredir=/app/allure-results
                         """
                     }
                 }
@@ -96,15 +95,22 @@ pipeline {
                 allure([
                     includeProperties: false,
                     jdk: '',
-                    results: [[path: 'allure-results']]
+                    results: [
+                        [path: 'allure-results-api'],
+                        [path: 'allure-results-ui'],
+                        [path: 'allure-results-db'],
+                        [path: 'allure-results-auth']
+                    ]
                 ])
             }
         }
 
         stage('06 - Archive') {
             steps {
-                archiveArtifacts artifacts: 'report.html', allowEmptyArchive: true
-                archiveArtifacts artifacts: 'allure-results/**', allowEmptyArchive: true
+                archiveArtifacts artifacts: 'allure-results-api/**', allowEmptyArchive: true
+                archiveArtifacts artifacts: 'allure-results-ui/**', allowEmptyArchive: true
+                archiveArtifacts artifacts: 'allure-results-db/**', allowEmptyArchive: true
+                archiveArtifacts artifacts: 'allure-results-auth/**', allowEmptyArchive: true
             }
         }
     }
