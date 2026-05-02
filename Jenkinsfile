@@ -26,10 +26,20 @@ pipeline {
                 if exist allure-results-db rmdir /s /q allure-results-db
                 if exist allure-results-auth rmdir /s /q allure-results-auth
 
+                if exist flaky-reports-api rmdir /s /q flaky-reports-api
+                if exist flaky-reports-ui rmdir /s /q flaky-reports-ui
+                if exist flaky-reports-db rmdir /s /q flaky-reports-db
+                if exist flaky-reports-auth rmdir /s /q flaky-reports-auth
+
                 mkdir allure-results-api
                 mkdir allure-results-ui
                 mkdir allure-results-db
                 mkdir allure-results-auth
+
+                mkdir flaky-reports-api
+                mkdir flaky-reports-ui
+                mkdir flaky-reports-db
+                mkdir flaky-reports-auth
                 """
             }
         }
@@ -49,6 +59,8 @@ pipeline {
                         bat """
                         docker run --rm ^
                         -v "%CD%\\allure-results-api:/app/allure-results" ^
+                        -v "%CD%\\flaky-reports-api:/app/flaky-reports" ^
+                        -e FLAKY_REPORT_FILE=/app/flaky-reports/flaky_report.json ^
                         ${IMAGE_NAME} ^
                         python -m pytest -m "api and not demo" --env=${params.ENV} --reruns 2 --reruns-delay 1 --alluredir=/app/allure-results
                         """
@@ -60,6 +72,8 @@ pipeline {
                         bat """
                         docker run --rm ^
                         -v "%CD%\\allure-results-ui:/app/allure-results" ^
+                        -v "%CD%\\flaky-reports-ui:/app/flaky-reports" ^
+                        -e FLAKY_REPORT_FILE=/app/flaky-reports/flaky_report.json ^
                         ${IMAGE_NAME} ^
                         python -m pytest -m "(ui or fullstack) and not demo" --env=${params.ENV} --reruns 2 --reruns-delay 1 --alluredir=/app/allure-results
                         """
@@ -71,6 +85,8 @@ pipeline {
                         bat """
                         docker run --rm ^
                         -v "%CD%\\allure-results-db:/app/allure-results" ^
+                        -v "%CD%\\flaky-reports-db:/app/flaky-reports" ^
+                        -e FLAKY_REPORT_FILE=/app/flaky-reports/flaky_report.json ^
                         ${IMAGE_NAME} ^
                         python -m pytest -m "db and not demo" --env=${params.ENV} --reruns 2 --reruns-delay 1 --alluredir=/app/allure-results
                         """
@@ -82,6 +98,8 @@ pipeline {
                         bat """
                         docker run --rm ^
                         -v "%CD%\\allure-results-auth:/app/allure-results" ^
+                        -v "%CD%\\flaky-reports-auth:/app/flaky-reports" ^
+                        -e FLAKY_REPORT_FILE=/app/flaky-reports/flaky_report.json ^
                         ${IMAGE_NAME} ^
                         python -m pytest -m "auth and not demo" --env=${params.ENV} --reruns 2 --reruns-delay 1 --alluredir=/app/allure-results
                         """
@@ -111,13 +129,18 @@ pipeline {
                 archiveArtifacts artifacts: 'allure-results-ui/**', allowEmptyArchive: true
                 archiveArtifacts artifacts: 'allure-results-db/**', allowEmptyArchive: true
                 archiveArtifacts artifacts: 'allure-results-auth/**', allowEmptyArchive: true
+
+                archiveArtifacts artifacts: 'flaky-reports-api/**', allowEmptyArchive: true
+                archiveArtifacts artifacts: 'flaky-reports-ui/**', allowEmptyArchive: true
+                archiveArtifacts artifacts: 'flaky-reports-db/**', allowEmptyArchive: true
+                archiveArtifacts artifacts: 'flaky-reports-auth/**', allowEmptyArchive: true
             }
         }
     }
 
     post {
         success {
-            echo 'SUCCESS - Parallel Docker execution completed with retry support'
+            echo 'SUCCESS - Parallel Docker execution completed with flaky analytics'
         }
         failure {
             echo 'FAILURE - One or more suites failed'
