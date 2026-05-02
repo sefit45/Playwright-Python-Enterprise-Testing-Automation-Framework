@@ -16,6 +16,9 @@ from API_Tests.auth_client import AuthClient
 # Import LoginPage class for UI testing
 from pages.login_page import LoginPage
 
+# Import flaky analytics helpers
+from utils.flaky_tracker import record_test, record_retry, save_report
+
 
 # Add custom CLI option --env
 def pytest_addoption(parser):
@@ -206,3 +209,25 @@ def pytest_runtest_makereport(item, call):
                 name="Failure Screenshot",
                 attachment_type=allure.attachment_type.PNG
             )
+
+
+# Hook: track test execution and retry events
+def pytest_runtest_logreport(report):
+
+    # Count only real test call phase
+    if report.when == "call":
+
+        # Record every final executed test
+        if report.outcome in ["passed", "failed"]:
+            record_test(report.nodeid)
+
+        # Record retry event from pytest-rerunfailures
+        if report.outcome == "rerun":
+            record_retry(report.nodeid)
+
+
+# Hook: save flaky analytics report at the end of pytest session
+def pytest_sessionfinish(session, exitstatus):
+
+    # Save flaky report to JSON file
+    save_report()
