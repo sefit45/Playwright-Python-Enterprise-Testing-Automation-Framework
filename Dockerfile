@@ -1,28 +1,20 @@
-# Use official Python image as base image
-FROM python:3.14-slim
+# Use official Microsoft Playwright image with Python support
+FROM mcr.microsoft.com/playwright/python:v1.59.0-jammy
 
-# Set working directory inside the container
+# Set working directory inside container
 WORKDIR /app
 
-# Install system dependencies required by Playwright browsers
-RUN apt-get update && apt-get install -y \
-    wget \
-    curl \
-    unzip \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy requirements file into container
+# Copy only requirements first to improve Docker cache
 COPY requirements.txt .
 
+# Upgrade pip
+RUN python -m pip install --upgrade pip
+
 # Install Python dependencies
-RUN pip install --upgrade pip
 RUN pip install -r requirements.txt
 
-# Install Playwright browsers and required OS dependencies
-RUN playwright install --with-deps
-
-# Copy full project into container
+# Copy project files after dependencies
 COPY . .
 
-# Default command for running regression tests
+# Default command for regression execution
 CMD ["python", "-m", "pytest", "-m", "regression and not demo", "--env=dev"]
