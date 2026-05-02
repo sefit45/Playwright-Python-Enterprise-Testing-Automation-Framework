@@ -18,13 +18,14 @@ pipeline {
             }
         }
 
-        stage('02 - Clean') {
+        stage('02 - Clean Workspace') {
             steps {
                 bat """
                 if exist allure-results-api rmdir /s /q allure-results-api
                 if exist allure-results-ui rmdir /s /q allure-results-ui
                 if exist allure-results-db rmdir /s /q allure-results-db
                 if exist allure-results-auth rmdir /s /q allure-results-auth
+                if exist allure-results-flaky rmdir /s /q allure-results-flaky
 
                 if exist flaky-reports-api rmdir /s /q flaky-reports-api
                 if exist flaky-reports-ui rmdir /s /q flaky-reports-ui
@@ -35,6 +36,7 @@ pipeline {
                 mkdir allure-results-ui
                 mkdir allure-results-db
                 mkdir allure-results-auth
+                mkdir allure-results-flaky
 
                 mkdir flaky-reports-api
                 mkdir flaky-reports-ui
@@ -46,12 +48,11 @@ pipeline {
 
         stage('03 - Build Docker Image') {
             steps {
-                echo "Building Docker image..."
                 bat "docker build -t ${IMAGE_NAME} ."
             }
         }
 
-        stage('04 - Parallel Docker Execution') {
+        stage('04 - Parallel Test Execution') {
             parallel {
 
                 stage('API Tests') {
@@ -108,7 +109,22 @@ pipeline {
             }
         }
 
-        stage('05 - Allure Report') {
+        stage('05 - Generate Flaky Dashboard') {
+            steps {
+                bat """
+                docker run --rm ^
+                -v "%CD%\\flaky-reports-api:/app/flaky-reports-api" ^
+                -v "%CD%\\flaky-reports-ui:/app/flaky-reports-ui" ^
+                -v "%CD%\\flaky-reports-db:/app/flaky-reports-db" ^
+                -v "%CD%\\flaky-reports-auth:/app/flaky-reports-auth" ^
+                -v "%CD%\\allure-results-flaky:/app/allure-results-flaky" ^
+                ${IMAGE_NAME} ^
+                python utils/flaky_dashboard.py
+                """
+            }
+        }
+
+        stage('06 - Allure Report') {
             steps {
                 allure([
                     includeProperties: false,
@@ -117,33 +133,27 @@ pipeline {
                         [path: 'allure-results-api'],
                         [path: 'allure-results-ui'],
                         [path: 'allure-results-db'],
-                        [path: 'allure-results-auth']
+                        [path: 'allure-results-auth'],
+                        [path: 'allure-results-flaky']
                     ]
                 ])
             }
         }
 
-        stage('06 - Archive') {
+        stage('07 - Archive Artifacts') {
             steps {
-                archiveArtifacts artifacts: 'allure-results-api/**', allowEmptyArchive: true
-                archiveArtifacts artifacts: 'allure-results-ui/**', allowEmptyArchive: true
-                archiveArtifacts artifacts: 'allure-results-db/**', allowEmptyArchive: true
-                archiveArtifacts artifacts: 'allure-results-auth/**', allowEmptyArchive: true
-
-                archiveArtifacts artifacts: 'flaky-reports-api/**', allowEmptyArchive: true
-                archiveArtifacts artifacts: 'flaky-reports-ui/**', allowEmptyArchive: true
-                archiveArtifacts artifacts: 'flaky-reports-db/**', allowEmptyArchive: true
-                archiveArtifacts artifacts: 'flaky-reports-auth/**', allowEmptyArchive: true
+                archiveArtifacts artifacts: 'allure-results-*/**', allowEmptyArchive: true
+                archiveArtifacts artifacts: 'flaky-reports-*/**', allowEmptyArchive: true
             }
         }
     }
 
     post {
         success {
-            echo 'SUCCESS - Parallel Docker execution completed with flaky analytics'
+            echo 'SUCCESS - Full pipeline with Flaky Dashboard completed'
         }
         failure {
-            echo 'FAILURE - One or more suites failed'
+            echo 'FAILURE - Pipeline failed'
         }
     }
 }
