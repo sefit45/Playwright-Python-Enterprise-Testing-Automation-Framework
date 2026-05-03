@@ -7,7 +7,9 @@ pipeline {
     }
 
     environment {
-        IMAGE_NAME = "sefit1976/qa-framework:latest"
+        DOCKER_IMAGE = "sefit1976/qa-framework"
+        IMAGE_TAG = "build-${BUILD_NUMBER}"
+        FULL_IMAGE = "${DOCKER_IMAGE}:${IMAGE_TAG}"
     }
 
     stages {
@@ -18,7 +20,35 @@ pipeline {
             }
         }
 
-        stage('02 - Clean Workspace') {
+        stage('02 - Build Docker Image') {
+            steps {
+                echo "Building Docker image ${FULL_IMAGE}"
+                bat "docker build -t ${FULL_IMAGE} ."
+            }
+        }
+
+        stage('03 - Docker Login') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-creds',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    bat """
+                    echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin
+                    """
+                }
+            }
+        }
+
+        stage('04 - Push Docker Image') {
+            steps {
+                echo "Pushing Docker image ${FULL_IMAGE}"
+                bat "docker push ${FULL_IMAGE}"
+            }
+        }
+
+        stage('05 - Prepare Workspace') {
             steps {
                 bat """
                 if exist allure-results-api rmdir /s /q allure-results-api
@@ -46,13 +76,7 @@ pipeline {
             }
         }
 
-        stage('03 - Pull Docker Image') {
-            steps {
-                bat "docker pull ${IMAGE_NAME}"
-            }
-        }
-
-        stage('04 - Parallel Test Execution') {
+        stage('06 - Parallel Test Execution') {
             parallel {
 
                 stage('API Tests') {
@@ -62,7 +86,7 @@ pipeline {
                         -v "%CD%\\allure-results-api:/app/allure-results" ^
                         -v "%CD%\\flaky-reports-api:/app/flaky-reports" ^
                         -e FLAKY_REPORT_FILE=/app/flaky-reports/flaky_report.json ^
-                        ${IMAGE_NAME} ^
+                        ${FULL_IMAGE} ^
                         python -m pytest -m "api and not demo" --env=${params.ENV} --reruns 2 --reruns-delay 1 --alluredir=/app/allure-results
                         """
                     }
@@ -75,7 +99,7 @@ pipeline {
                         -v "%CD%\\allure-results-ui:/app/allure-results" ^
                         -v "%CD%\\flaky-reports-ui:/app/flaky-reports" ^
                         -e FLAKY_REPORT_FILE=/app/flaky-reports/flaky_report.json ^
-                        ${IMAGE_NAME} ^
+                        ${FULL_IMAGE} ^
                         python -m pytest -m "(ui or fullstack) and not demo" --env=${params.ENV} --reruns 2 --reruns-delay 1 --alluredir=/app/allure-results
                         """
                     }
@@ -88,7 +112,7 @@ pipeline {
                         -v "%CD%\\allure-results-db:/app/allure-results" ^
                         -v "%CD%\\flaky-reports-db:/app/flaky-reports" ^
                         -e FLAKY_REPORT_FILE=/app/flaky-reports/flaky_report.json ^
-                        ${IMAGE_NAME} ^
+                        ${FULL_IMAGE} ^
                         python -m pytest -m "db and not demo" --env=${params.ENV} --reruns 2 --reruns-delay 1 --alluredir=/app/allure-results
                         """
                     }
@@ -101,7 +125,7 @@ pipeline {
                         -v "%CD%\\allure-results-auth:/app/allure-results" ^
                         -v "%CD%\\flaky-reports-auth:/app/flaky-reports" ^
                         -e FLAKY_REPORT_FILE=/app/flaky-reports/flaky_report.json ^
-                        ${IMAGE_NAME} ^
+                        ${FULL_IMAGE} ^
                         python -m pytest -m "auth and not demo" --env=${params.ENV} --reruns 2 --reruns-delay 1 --alluredir=/app/allure-results
                         """
                     }
@@ -109,8 +133,9 @@ pipeline {
             }
         }
 
-        stage('05 - Generate Flaky Dashboard') {
+        stage('07 - Generate Flaky Dashboard') {
             steps {
+                echo "Generating Flaky Analytics Dashboard"
                 bat """
                 docker run --rm ^
                 -v "%CD%\\flaky-reports-api:/app/flaky-reports-api" ^
@@ -118,13 +143,13 @@ pipeline {
                 -v "%CD%\\flaky-reports-db:/app/flaky-reports-db" ^
                 -v "%CD%\\flaky-reports-auth:/app/flaky-reports-auth" ^
                 -v "%CD%\\allure-results-flaky:/app/allure-results-flaky" ^
-                ${IMAGE_NAME} ^
+                ${FULL_IMAGE} ^
                 python utils/flaky_dashboard.py
                 """
             }
         }
 
-        stage('06 - Allure Report') {
+        stage('08 - Allure Report') {
             steps {
                 allure([
                     includeProperties: false,
@@ -140,7 +165,7 @@ pipeline {
             }
         }
 
-        stage('07 - Archive Artifacts') {
+        stage('09 - Archive Artifacts') {
             steps {
                 archiveArtifacts artifacts: 'allure-results-*/**', allowEmptyArchive: true
                 archiveArtifacts artifacts: 'flaky-reports-*/**', allowEmptyArchive: true
@@ -150,10 +175,13 @@ pipeline {
 
     post {
         success {
-            echo 'SUCCESS - Full pipeline with Flaky Dashboard completed'
+            echo "SUCCESS - Image ${FULL_IMAGE} built, pushed and tested"
         }
         failure {
-            echo 'FAILURE - Pipeline failed'
+            echo "FAILURE - Pipeline failed"
+        }
+        always {
+            echo "Pipeline finished"
         }
     }
 }
