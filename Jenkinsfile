@@ -7,9 +7,19 @@ pipeline {
     }
 
     environment {
-        DOCKER_IMAGE = "sefit1976/qa-framework"
+        AWS_REGION = "eu-central-1"
+        AWS_ACCOUNT_ID = "401713183707"
+        ECR_REPOSITORY = "qa-framework"
+        ECR_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
         IMAGE_TAG = "build-${BUILD_NUMBER}"
-        FULL_IMAGE = "${DOCKER_IMAGE}:${IMAGE_TAG}"
+        FULL_IMAGE = "${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
+        LATEST_IMAGE = "${ECR_REGISTRY}/${ECR_REPOSITORY}:latest"
+        ECS_CLUSTER = "qa-automation-cluster-fixed-after-role-definition"
+        ECS_TASK_DEFINITION = "qa-framework-task"
+        ECS_CONTAINER_NAME = "qa-framework"
+        // חובה להחליף לפי ה־subnet וה־security group שלך ב-AWS
+        ECS_SUBNETS = "subnet-018492d0f5ea2c9c9"
+        ECS_SECURITY_GROUP = "sg-06c270f9f6e045654"
     }
 
     stages {
@@ -22,164 +32,69 @@ pipeline {
 
         stage('02 - Build Docker Image') {
             steps {
-                echo "Building Docker image ${FULL_IMAGE}"
-                bat "docker build -t ${FULL_IMAGE} ."
-            }
-        }
+                echo "Building Docker image: ${FULL_IMAGE}"
 
-        stage('03 - Docker Login') {
-            steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub-creds',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
-                    bat """
-                    echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin
-                    """
-                }
-            }
-        }
-
-        stage('04 - Push Docker Image') {
-            steps {
-                echo "Pushing Docker image ${FULL_IMAGE}"
-                bat "docker push ${FULL_IMAGE}"
-            }
-        }
-
-        stage('05 - Prepare Workspace') {
-            steps {
                 bat """
-                if exist allure-results-api rmdir /s /q allure-results-api
-                if exist allure-results-ui rmdir /s /q allure-results-ui
-                if exist allure-results-db rmdir /s /q allure-results-db
-                if exist allure-results-auth rmdir /s /q allure-results-auth
-                if exist allure-results-flaky rmdir /s /q allure-results-flaky
-
-                if exist flaky-reports-api rmdir /s /q flaky-reports-api
-                if exist flaky-reports-ui rmdir /s /q flaky-reports-ui
-                if exist flaky-reports-db rmdir /s /q flaky-reports-db
-                if exist flaky-reports-auth rmdir /s /q flaky-reports-auth
-
-                mkdir allure-results-api
-                mkdir allure-results-ui
-                mkdir allure-results-db
-                mkdir allure-results-auth
-                mkdir allure-results-flaky
-
-                mkdir flaky-reports-api
-                mkdir flaky-reports-ui
-                mkdir flaky-reports-db
-                mkdir flaky-reports-auth
+                docker build -t ${ECR_REPOSITORY}:latest .
+                docker tag ${ECR_REPOSITORY}:latest ${FULL_IMAGE}
+                docker tag ${ECR_REPOSITORY}:latest ${LATEST_IMAGE}
                 """
             }
         }
 
-        stage('06 - Parallel Test Execution') {
-            parallel {
-
-                stage('API Tests') {
-                    steps {
-                        bat """
-                        docker run --rm ^
-                        -v "%CD%\\allure-results-api:/app/allure-results" ^
-                        -v "%CD%\\flaky-reports-api:/app/flaky-reports" ^
-                        -e FLAKY_REPORT_FILE=/app/flaky-reports/flaky_report.json ^
-                        ${FULL_IMAGE} ^
-                        python -m pytest -m "api and not demo" --env=${params.ENV} --reruns 2 --reruns-delay 1 --alluredir=/app/allure-results
-                        """
-                    }
-                }
-
-                stage('UI + FullStack Tests') {
-                    steps {
-                        bat """
-                        docker run --rm ^
-                        -v "%CD%\\allure-results-ui:/app/allure-results" ^
-                        -v "%CD%\\flaky-reports-ui:/app/flaky-reports" ^
-                        -e FLAKY_REPORT_FILE=/app/flaky-reports/flaky_report.json ^
-                        ${FULL_IMAGE} ^
-                        python -m pytest -m "(ui or fullstack) and not demo" --env=${params.ENV} --reruns 2 --reruns-delay 1 --alluredir=/app/allure-results
-                        """
-                    }
-                }
-
-                stage('DB Tests') {
-                    steps {
-                        bat """
-                        docker run --rm ^
-                        -v "%CD%\\allure-results-db:/app/allure-results" ^
-                        -v "%CD%\\flaky-reports-db:/app/flaky-reports" ^
-                        -e FLAKY_REPORT_FILE=/app/flaky-reports/flaky_report.json ^
-                        ${FULL_IMAGE} ^
-                        python -m pytest -m "db and not demo" --env=${params.ENV} --reruns 2 --reruns-delay 1 --alluredir=/app/allure-results
-                        """
-                    }
-                }
-
-                stage('Auth Tests') {
-                    steps {
-                        bat """
-                        docker run --rm ^
-                        -v "%CD%\\allure-results-auth:/app/allure-results" ^
-                        -v "%CD%\\flaky-reports-auth:/app/flaky-reports" ^
-                        -e FLAKY_REPORT_FILE=/app/flaky-reports/flaky_report.json ^
-                        ${FULL_IMAGE} ^
-                        python -m pytest -m "auth and not demo" --env=${params.ENV} --reruns 2 --reruns-delay 1 --alluredir=/app/allure-results
-                        """
-                    }
-                }
-            }
-        }
-
-        stage('07 - Generate Flaky Dashboard') {
+        stage('03 - AWS ECR Login') {
             steps {
-                echo "Generating Flaky Analytics Dashboard"
+                echo "Logging Docker into AWS ECR"
+
                 bat """
-                docker run --rm ^
-                -v "%CD%\\flaky-reports-api:/app/flaky-reports-api" ^
-                -v "%CD%\\flaky-reports-ui:/app/flaky-reports-ui" ^
-                -v "%CD%\\flaky-reports-db:/app/flaky-reports-db" ^
-                -v "%CD%\\flaky-reports-auth:/app/flaky-reports-auth" ^
-                -v "%CD%\\allure-results-flaky:/app/allure-results-flaky" ^
-                ${FULL_IMAGE} ^
-                python utils/flaky_dashboard.py
+                aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}
                 """
             }
         }
 
-        stage('08 - Allure Report') {
+        stage('04 - Push Docker Image to ECR') {
             steps {
-                allure([
-                    includeProperties: false,
-                    jdk: '',
-                    results: [
-                        [path: 'allure-results-api'],
-                        [path: 'allure-results-ui'],
-                        [path: 'allure-results-db'],
-                        [path: 'allure-results-auth'],
-                        [path: 'allure-results-flaky']
-                    ]
-                ])
+                echo "Pushing Docker image to ECR"
+
+                bat """
+                docker push ${FULL_IMAGE}
+                docker push ${LATEST_IMAGE}
+                """
             }
         }
 
-        stage('09 - Archive Artifacts') {
+        stage('05 - Run ECS Fargate Task') {
             steps {
-                archiveArtifacts artifacts: 'allure-results-*/**', allowEmptyArchive: true
-                archiveArtifacts artifacts: 'flaky-reports-*/**', allowEmptyArchive: true
+                echo "Running ECS Fargate task from image: ${LATEST_IMAGE}"
+
+                bat """
+                aws ecs run-task ^
+                  --cluster ${ECS_CLUSTER} ^
+                  --launch-type FARGATE ^
+                  --task-definition ${ECS_TASK_DEFINITION} ^
+                  --count 1 ^
+                  --network-configuration "awsvpcConfiguration={subnets=[${ECS_SUBNETS}],securityGroups=[${ECS_SECURITY_GROUP}],assignPublicIp=ENABLED}" ^
+                  --region ${AWS_REGION} > ecs-run-task-output.json
+                """
+            }
+        }
+
+        stage('06 - Archive ECS Run Output') {
+            steps {
+                archiveArtifacts artifacts: 'ecs-run-task-output.json', allowEmptyArchive: true
             }
         }
     }
 
     post {
         success {
-            echo "SUCCESS - Image ${FULL_IMAGE} built, pushed and tested"
+            echo "SUCCESS - Jenkins built image, pushed to ECR and triggered ECS Fargate task"
         }
+
         failure {
-            echo "FAILURE - Pipeline failed"
+            echo "FAILURE - Jenkins pipeline failed"
         }
+
         always {
             echo "Pipeline finished"
         }
