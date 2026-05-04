@@ -25,8 +25,16 @@ pipeline {
 
     stages {
 
-        stage('Build Docker Image') {
+        stage('01 - Checkout') {
             steps {
+                checkout scm
+            }
+        }
+
+        stage('02 - Build Docker Image') {
+            steps {
+                echo "Building Docker image: ${FULL_IMAGE}"
+
                 bat """
                 docker build -t ${ECR_REPOSITORY}:latest .
                 docker tag ${ECR_REPOSITORY}:latest ${FULL_IMAGE}
@@ -35,10 +43,12 @@ pipeline {
             }
         }
 
-        stage('Login to ECR') {
+        stage('03 - AWS ECR Login') {
             steps {
+                echo "Logging Docker into AWS ECR"
+
                 withCredentials([[
-                    \$class: 'AmazonWebServicesCredentialsBinding',
+                    $class: 'AmazonWebServicesCredentialsBinding',
                     credentialsId: 'aws-creds'
                 ]]) {
                     bat """
@@ -49,10 +59,12 @@ pipeline {
             }
         }
 
-        stage('Push Image') {
+        stage('04 - Push Docker Image to ECR') {
             steps {
+                echo "Pushing Docker image to ECR"
+
                 withCredentials([[
-                    \$class: 'AmazonWebServicesCredentialsBinding',
+                    $class: 'AmazonWebServicesCredentialsBinding',
                     credentialsId: 'aws-creds'
                 ]]) {
                     bat """
@@ -63,13 +75,14 @@ pipeline {
             }
         }
 
-        stage('Run ECS Task') {
+        stage('05 - Run ECS Fargate Task') {
             steps {
+                echo "Running ECS Fargate task from image: ${LATEST_IMAGE}"
+
                 withCredentials([[
-                    \$class: 'AmazonWebServicesCredentialsBinding',
+                    $class: 'AmazonWebServicesCredentialsBinding',
                     credentialsId: 'aws-creds'
                 ]]) {
-
                     bat """
                     aws ecs run-task ^
                       --cluster ${ECS_CLUSTER} ^
@@ -84,16 +97,17 @@ pipeline {
             }
         }
 
-        stage('Wait for Task to Finish') {
+        stage('06 - Wait for ECS Task to Finish') {
             steps {
+                echo "Waiting for ECS task to finish"
+
                 withCredentials([[
-                    \$class: 'AmazonWebServicesCredentialsBinding',
+                    $class: 'AmazonWebServicesCredentialsBinding',
                     credentialsId: 'aws-creds'
                 ]]) {
-
                     script {
                         def taskArn = bat(
-                            script: 'powershell -Command "(Get-Content task.json | ConvertFrom-Json).tasks[0].taskArn"',
+                            script: '@powershell -NoProfile -Command "(Get-Content task.json | ConvertFrom-Json).tasks[0].taskArn"',
                             returnStdout: true
                         ).trim()
 
@@ -117,20 +131,32 @@ pipeline {
             }
         }
 
-        stage('Print Report Link') {
+        stage('07 - Archive ECS Output') {
             steps {
-                echo "Report:"
+                archiveArtifacts artifacts: 'task.json,result.json', allowEmptyArchive: true
+            }
+        }
+
+        stage('08 - Print Report Link') {
+            steps {
+                echo "Report URL:"
                 echo "https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${REPORT_FILE}"
             }
         }
     }
 
     post {
-        success {
-            echo "🔥 SUCCESS - Everything is working end-to-end"
+        always {
+            echo "Pipeline finished"
         }
+
+        success {
+            echo "SUCCESS - Jenkins built image, pushed to ECR, triggered ECS Fargate task and waited for completion"
+            echo "Report URL: https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${REPORT_FILE}"
+        }
+
         failure {
-            echo "❌ FAILURE"
+            echo "FAILURE - Jenkins pipeline failed"
         }
     }
 }
