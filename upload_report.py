@@ -10,7 +10,6 @@ def upload_html_report_to_s3():
         print("report.html was not found. Skipping S3 upload.")
         return
 
-    # ✅ קבלת שם דוח מבחוץ (Jenkins)
     report_file = os.getenv("REPORT_FILE")
 
     if report_file:
@@ -19,19 +18,23 @@ def upload_html_report_to_s3():
         timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
         s3_report_name = f"report-{timestamp}.html"
 
-    upload_command = (
-        f"aws s3 cp {report_path} "
-        f"s3://{BUCKET_NAME}/{s3_report_name}"
-    )
+    # 🎯 דוח לפי Build
+    upload_main = f"aws s3 cp {report_path} s3://{BUCKET_NAME}/{s3_report_name}"
 
-    print(f"Uploading report to S3: s3://{BUCKET_NAME}/{s3_report_name}")
+    # 🎯 latest.html (תמיד האחרון)
+    upload_latest = f"aws s3 cp {report_path} s3://{BUCKET_NAME}/latest.html"
 
-    exit_code = os.system(upload_command)
+    print(f"Uploading report: {s3_report_name}")
 
-    if exit_code != 0:
-        raise Exception("Failed to upload report to S3")
+    if os.system(upload_main) != 0:
+        raise Exception("Failed to upload main report")
 
-    print("Report uploaded to S3 successfully")
+    print("Uploading latest.html")
+
+    if os.system(upload_latest) != 0:
+        raise Exception("Failed to upload latest report")
+
+    print("Report + latest.html uploaded successfully")
 
 if __name__ == "__main__":
     upload_html_report_to_s3()
