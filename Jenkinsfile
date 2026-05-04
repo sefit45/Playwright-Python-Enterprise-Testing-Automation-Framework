@@ -2,10 +2,6 @@ pipeline {
 
     agent any
 
-    parameters {
-        choice(name: 'ENV', choices: ['dev', 'st', 'uat', 'prod'], description: 'Select environment')
-    }
-
     environment {
         AWS_REGION = "eu-central-1"
         AWS_ACCOUNT_ID = "401713183707"
@@ -14,30 +10,23 @@ pipeline {
         ECR_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
         IMAGE_TAG = "build-${BUILD_NUMBER}"
-
         FULL_IMAGE = "${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
         LATEST_IMAGE = "${ECR_REGISTRY}/${ECR_REPOSITORY}:latest"
 
         ECS_CLUSTER = "qa-automation-cluster-fixed-after-role-definition"
         ECS_TASK_DEFINITION = "qa-framework-task"
-        ECS_CONTAINER_NAME = "qa-framework"
 
         ECS_SUBNETS = "subnet-018492d0f5ea2c9c9"
         ECS_SECURITY_GROUP = "sg-06c270f9f6e045654"
+
+        S3_BUCKET = "qa-automation-reports-bucket-sefi"
+        REPORT_FILE = "report-${BUILD_NUMBER}.html"
     }
 
     stages {
 
-        stage('01 - Checkout') {
+        stage('Build Docker Image') {
             steps {
-                checkout scm
-            }
-        }
-
-        stage('02 - Build Docker Image') {
-            steps {
-                echo "Building Docker image: ${FULL_IMAGE}"
-
                 bat """
                 docker build -t ${ECR_REPOSITORY}:latest .
                 docker tag ${ECR_REPOSITORY}:latest ${FULL_IMAGE}
@@ -46,12 +35,10 @@ pipeline {
             }
         }
 
-        stage('03 - AWS ECR Login') {
+        stage('Login to ECR') {
             steps {
-                echo "Logging Docker into AWS ECR"
-
                 withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
+                    \$class: 'AmazonWebServicesCredentialsBinding',
                     credentialsId: 'aws-creds'
                 ]]) {
                     bat """
@@ -62,12 +49,10 @@ pipeline {
             }
         }
 
-        stage('04 - Push Docker Image to ECR') {
+        stage('Push Image') {
             steps {
-                echo "Pushing Docker image to ECR"
-
                 withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
+                    \$class: 'AmazonWebServicesCredentialsBinding',
                     credentialsId: 'aws-creds'
                 ]]) {
                     bat """
@@ -78,14 +63,13 @@ pipeline {
             }
         }
 
-        stage('05 - Run ECS Fargate Task') {
+        stage('Run ECS Task') {
             steps {
-                echo "Running ECS Fargate task from image: ${LATEST_IMAGE}"
-
                 withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
+                    \$class: 'AmazonWebServicesCredentialsBinding',
                     credentialsId: 'aws-creds'
                 ]]) {
+
                     bat """
                     aws ecs run-task ^
                       --cluster ${ECS_CLUSTER} ^
@@ -93,30 +77,60 @@ pipeline {
                       --task-definition ${ECS_TASK_DEFINITION} ^
                       --count 1 ^
                       --network-configuration "awsvpcConfiguration={subnets=[${ECS_SUBNETS}],securityGroups=[${ECS_SECURITY_GROUP}],assignPublicIp=ENABLED}" ^
-                      --region ${AWS_REGION} > ecs-run-task-output.json
+                      --overrides "{\\"containerOverrides\\":[{\\"name\\":\\"qa-framework\\",\\"environment\\":[{\\"name\\":\\"REPORT_FILE\\",\\"value\\":\\"${REPORT_FILE}\\"}]}]}" ^
+                      --region ${AWS_REGION} > task.json
                     """
                 }
             }
         }
 
-        stage('06 - Archive ECS Run Output') {
+        stage('Wait for Task to Finish') {
             steps {
-                archiveArtifacts artifacts: 'ecs-run-task-output.json', allowEmptyArchive: true
+                withCredentials([[
+                    \$class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-creds'
+                ]]) {
+
+                    script {
+                        def taskArn = bat(
+                            script: 'powershell -Command "(Get-Content task.json | ConvertFrom-Json).tasks[0].taskArn"',
+                            returnStdout: true
+                        ).trim()
+
+                        echo "Task ARN: ${taskArn}"
+
+                        bat """
+                        aws ecs wait tasks-stopped ^
+                          --cluster ${ECS_CLUSTER} ^
+                          --tasks ${taskArn} ^
+                          --region ${AWS_REGION}
+                        """
+
+                        bat """
+                        aws ecs describe-tasks ^
+                          --cluster ${ECS_CLUSTER} ^
+                          --tasks ${taskArn} ^
+                          --region ${AWS_REGION} > result.json
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('Print Report Link') {
+            steps {
+                echo "Report:"
+                echo "https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${REPORT_FILE}"
             }
         }
     }
 
     post {
-        always {
-            echo "Pipeline finished"
-        }
-
         success {
-            echo "SUCCESS - Jenkins built image, pushed to ECR and triggered ECS Fargate task"
+            echo "🔥 SUCCESS - Everything is working end-to-end"
         }
-
         failure {
-            echo "FAILURE - Jenkins pipeline failed"
+            echo "❌ FAILURE"
         }
     }
 }
