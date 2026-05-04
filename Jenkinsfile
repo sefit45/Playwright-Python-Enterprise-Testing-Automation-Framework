@@ -9,15 +9,19 @@ pipeline {
     environment {
         AWS_REGION = "eu-central-1"
         AWS_ACCOUNT_ID = "401713183707"
+
         ECR_REPOSITORY = "qa-framework"
         ECR_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+
         IMAGE_TAG = "build-${BUILD_NUMBER}"
+
         FULL_IMAGE = "${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
         LATEST_IMAGE = "${ECR_REGISTRY}/${ECR_REPOSITORY}:latest"
+
         ECS_CLUSTER = "qa-automation-cluster-fixed-after-role-definition"
         ECS_TASK_DEFINITION = "qa-framework-task"
         ECS_CONTAINER_NAME = "qa-framework"
-        // חובה להחליף לפי ה־subnet וה־security group שלך ב-AWS
+
         ECS_SUBNETS = "subnet-018492d0f5ea2c9c9"
         ECS_SECURITY_GROUP = "sg-06c270f9f6e045654"
     }
@@ -46,9 +50,15 @@ pipeline {
             steps {
                 echo "Logging Docker into AWS ECR"
 
-                bat """
-                aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}
-                """
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-creds'
+                ]]) {
+                    bat """
+                    aws ecr get-login-password --region ${AWS_REGION} ^
+                    | docker login --username AWS --password-stdin ${ECR_REGISTRY}
+                    """
+                }
             }
         }
 
@@ -56,10 +66,15 @@ pipeline {
             steps {
                 echo "Pushing Docker image to ECR"
 
-                bat """
-                docker push ${FULL_IMAGE}
-                docker push ${LATEST_IMAGE}
-                """
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-creds'
+                ]]) {
+                    bat """
+                    docker push ${FULL_IMAGE}
+                    docker push ${LATEST_IMAGE}
+                    """
+                }
             }
         }
 
@@ -67,15 +82,20 @@ pipeline {
             steps {
                 echo "Running ECS Fargate task from image: ${LATEST_IMAGE}"
 
-                bat """
-                aws ecs run-task ^
-                  --cluster ${ECS_CLUSTER} ^
-                  --launch-type FARGATE ^
-                  --task-definition ${ECS_TASK_DEFINITION} ^
-                  --count 1 ^
-                  --network-configuration "awsvpcConfiguration={subnets=[${ECS_SUBNETS}],securityGroups=[${ECS_SECURITY_GROUP}],assignPublicIp=ENABLED}" ^
-                  --region ${AWS_REGION} > ecs-run-task-output.json
-                """
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-creds'
+                ]]) {
+                    bat """
+                    aws ecs run-task ^
+                      --cluster ${ECS_CLUSTER} ^
+                      --launch-type FARGATE ^
+                      --task-definition ${ECS_TASK_DEFINITION} ^
+                      --count 1 ^
+                      --network-configuration "awsvpcConfiguration={subnets=[${ECS_SUBNETS}],securityGroups=[${ECS_SECURITY_GROUP}],assignPublicIp=ENABLED}" ^
+                      --region ${AWS_REGION} > ecs-run-task-output.json
+                    """
+                }
             }
         }
 
@@ -87,16 +107,16 @@ pipeline {
     }
 
     post {
+        always {
+            echo "Pipeline finished"
+        }
+
         success {
             echo "SUCCESS - Jenkins built image, pushed to ECR and triggered ECS Fargate task"
         }
 
         failure {
             echo "FAILURE - Jenkins pipeline failed"
-        }
-
-        always {
-            echo "Pipeline finished"
         }
     }
 }
