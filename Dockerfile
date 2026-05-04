@@ -13,8 +13,13 @@ RUN python -m pip install --upgrade pip
 # Install Python dependencies
 RUN pip install -r requirements.txt
 
-# Copy project files after dependencies
+# Install AWS CLI for uploading reports to S3
+RUN pip install awscli
+
+# Copy full project into container
 COPY . .
 
-# Default command for regression execution
-CMD ["python", "-m", "pytest", "-m", "regression and not demo", "--env=dev"]
+# Default command:
+# 1. Run regression tests
+# 2. Upload HTML report to S3 only if tests passed
+CMD ["bash", "-c", "python -m pytest -m 'regression and not demo' --env=dev && python upload_report.py"]

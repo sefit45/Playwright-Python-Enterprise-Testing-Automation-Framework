@@ -1,28 +1,40 @@
 # Virtual environments
 venv/
 .venv/
+env/
 
 # Python cache
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
 .pytest_cache/
 
-# Reports
+# Test reports
 report.html
 allure-results/
 allure-report/
+allure-results-api/
+allure-results-ui/
+allure-results-db/
+allure-results-auth/
 
-# Logs and screenshots
+# Logs and artifacts
 logs/
 screenshots/
+videos/
+test-results/
 
-# Git
+# Git files
 .git/
-.gitignore
 
-# IDE
+# IDE files
 .vscode/
 .idea/
+
+# Environment files
+.env
+.env.*
 
 # OS files
 .DS_Store
