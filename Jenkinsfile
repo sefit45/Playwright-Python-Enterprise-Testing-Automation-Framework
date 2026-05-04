@@ -131,13 +131,34 @@ pipeline {
             }
         }
 
-        stage('07 - Archive ECS Output') {
+        stage('07 - Check Test Result') {
+            steps {
+                echo "Checking test result from ECS"
+
+                script {
+                    def exitCode = bat(
+                        script: '@powershell -NoProfile -Command "(Get-Content result.json | ConvertFrom-Json).tasks[0].containers[0].exitCode"',
+                        returnStdout: true
+                    ).trim()
+
+                    echo "Container exit code: ${exitCode}"
+
+                    if (exitCode != "0") {
+                        error("Tests FAILED")
+                    } else {
+                        echo "Tests PASSED"
+                    }
+                }
+            }
+        }
+
+        stage('08 - Archive ECS Output') {
             steps {
                 archiveArtifacts artifacts: 'task.json,result.json', allowEmptyArchive: true
             }
         }
 
-        stage('08 - Print Report Link') {
+        stage('09 - Print Report Link') {
             steps {
                 echo "Report URL:"
                 echo "https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${REPORT_FILE}"
@@ -148,15 +169,15 @@ pipeline {
     post {
         always {
             echo "Pipeline finished"
-        }
-
-        success {
-            echo "SUCCESS - Jenkins built image, pushed to ECR, triggered ECS Fargate task and waited for completion"
             echo "Report URL: https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${REPORT_FILE}"
         }
 
+        success {
+            echo "SUCCESS - Jenkins built image, pushed to ECR, ran ECS Fargate task, waited for completion and tests passed"
+        }
+
         failure {
-            echo "FAILURE - Jenkins pipeline failed"
+            echo "FAILURE - Jenkins pipeline failed or tests failed"
         }
     }
 }
