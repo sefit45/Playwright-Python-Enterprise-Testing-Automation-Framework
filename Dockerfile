@@ -16,10 +16,20 @@ RUN pip install -r requirements.txt
 # Install AWS CLI for uploading reports to S3
 RUN pip install awscli
 
+# Install Allure CLI
+RUN apt-get update && \
+    apt-get install -y wget unzip && \
+    wget https://github.com/allure-framework/allure2/releases/download/2.29.0/allure-2.29.0.zip && \
+    unzip allure-2.29.0.zip -d /opt/ && \
+    ln -s /opt/allure-2.29.0/bin/allure /usr/bin/allure && \
+    rm allure-2.29.0.zip && \
+    apt-get clean
+
 # Copy full project into container
 COPY . .
 
 # Default command:
 # 1. Run regression tests
-# 2. Upload HTML report to S3 only if tests passed
-CMD ["bash", "-c", "python -m pytest -m 'regression and not demo' --env=dev && python upload_report.py"]
+# 2. Generate Allure report
+# 3. Upload HTML + Allure reports to S3
+CMD ["bash", "-c", "pytest -m 'regression and not demo' --env=dev && allure generate allure-results -o allure-report --clean && python upload_report.py"]
