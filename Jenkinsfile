@@ -22,6 +22,7 @@ pipeline {
         S3_BUCKET = "qa-automation-reports-bucket-sefi"
         REPORT_FILE = "report-${BUILD_NUMBER}.html"
         LATEST_REPORT_FILE = "latest.html"
+        ALLURE_FOLDER = "allure-latest"
     }
 
     stages {
@@ -166,6 +167,9 @@ pipeline {
 
                 echo "Latest Report URL:"
                 echo "https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${LATEST_REPORT_FILE}"
+
+                echo "Allure Report URL:"
+                echo "https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${ALLURE_FOLDER}/index.html"
             }
         }
     }
@@ -175,6 +179,7 @@ pipeline {
             echo "Pipeline finished"
             echo "Report URL: https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${REPORT_FILE}"
             echo "Latest Report URL: https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${LATEST_REPORT_FILE}"
+            echo "Allure URL: https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${ALLURE_FOLDER}/index.html"
         }
 
         success {
@@ -184,7 +189,7 @@ pipeline {
                 script {
                     writeFile file: 'send-slack.ps1', text: """
 \$payload = @{
-    text = "✅ QA PASSED - Build ${BUILD_NUMBER} - Report: https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${REPORT_FILE} - Latest: https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${LATEST_REPORT_FILE}"
+    text = "✅ QA PASSED - Build ${BUILD_NUMBER} - Report: https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${REPORT_FILE} - Allure: https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${ALLURE_FOLDER}/index.html"
 } | ConvertTo-Json -Compress
 
 Invoke-RestMethod -Uri \$env:SLACK_WEBHOOK_URL -Method Post -ContentType "application/json" -Body \$payload
@@ -201,7 +206,7 @@ Invoke-RestMethod -Uri \$env:SLACK_WEBHOOK_URL -Method Post -ContentType "applic
                 script {
                     writeFile file: 'send-slack.ps1', text: """
 \$payload = @{
-    text = "❌ QA FAILED - Build ${BUILD_NUMBER} - Report: https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${REPORT_FILE} - Latest: https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${LATEST_REPORT_FILE}"
+    text = "❌ QA FAILED - Build ${BUILD_NUMBER} - Report: https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${REPORT_FILE} - Allure: https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${ALLURE_FOLDER}/index.html"
 } | ConvertTo-Json -Compress
 
 Invoke-RestMethod -Uri \$env:SLACK_WEBHOOK_URL -Method Post -ContentType "application/json" -Body \$payload
