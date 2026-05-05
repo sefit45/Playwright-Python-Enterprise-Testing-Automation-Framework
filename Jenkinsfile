@@ -21,6 +21,7 @@ pipeline {
 
         S3_BUCKET = "qa-automation-reports-bucket-sefi"
         REPORT_FILE = "report-${BUILD_NUMBER}.html"
+        LATEST_REPORT_FILE = "latest.html"
     }
 
     stages {
@@ -162,6 +163,9 @@ pipeline {
             steps {
                 echo "Report URL:"
                 echo "https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${REPORT_FILE}"
+
+                echo "Latest Report URL:"
+                echo "https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${LATEST_REPORT_FILE}"
             }
         }
     }
@@ -170,14 +174,31 @@ pipeline {
         always {
             echo "Pipeline finished"
             echo "Report URL: https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${REPORT_FILE}"
+            echo "Latest Report URL: https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${LATEST_REPORT_FILE}"
         }
 
         success {
             echo "SUCCESS - Jenkins built image, pushed to ECR, ran ECS Fargate task, waited for completion and tests passed"
+
+            withCredentials([string(credentialsId: 'slack-webhook-url', variable: 'SLACK_WEBHOOK_URL')]) {
+                bat """
+                curl -X POST -H "Content-type: application/json" ^
+                  --data "{\\"text\\":\\"✅ QA PASSED | Build ${BUILD_NUMBER} | Report: https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${REPORT_FILE} | Latest: https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${LATEST_REPORT_FILE}\\"}" ^
+                  %SLACK_WEBHOOK_URL%
+                """
+            }
         }
 
         failure {
             echo "FAILURE - Jenkins pipeline failed or tests failed"
+
+            withCredentials([string(credentialsId: 'slack-webhook-url', variable: 'SLACK_WEBHOOK_URL')]) {
+                bat """
+                curl -X POST -H "Content-type: application/json" ^
+                  --data "{\\"text\\":\\"❌ QA FAILED | Build ${BUILD_NUMBER} | Report: https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${REPORT_FILE} | Latest: https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${LATEST_REPORT_FILE}\\"}" ^
+                  %SLACK_WEBHOOK_URL%
+                """
+            }
         }
     }
 }
