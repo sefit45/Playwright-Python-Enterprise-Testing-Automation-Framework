@@ -29,14 +29,22 @@ RUN apt-get update && \
 COPY . .
 
 # Default command:
-# 1. Run all real tests in parallel (exclude demo)
-# 2. Save pytest exit code
-# 3. Generate Flaky dashboard
-# 4. Generate Allure report (even on failure)
-# 5. Upload reports to S3
-# 6. Exit with original pytest result
+# 1. Use PYTEST_MARKER when provided by Jenkins/ECS
+# 2. Run tests in parallel inside the container
+# 3. Exclude demo tests
+# 4. Save pytest exit code
+# 5. Generate Flaky dashboard
+# 6. Generate Allure report
+# 7. Upload reports to S3
+# 8. Exit with original pytest result
 CMD ["bash", "-c", "\
-pytest -n 3 -m \"not demo\" --env=dev --reruns 2 --reruns-delay 2; \
+if [ -z \"$PYTEST_MARKER\" ]; then \
+  PYTEST_MARKER='not demo'; \
+else \
+  PYTEST_MARKER=\"($PYTEST_MARKER) and not demo\"; \
+fi; \
+echo \"Running pytest marker: $PYTEST_MARKER\"; \
+pytest -n 3 -m \"$PYTEST_MARKER\" --env=dev --reruns 2 --reruns-delay 2; \
 TEST_EXIT_CODE=$?; \
 python utils/flaky_dashboard.py; \
 allure generate allure-results -o allure-report --clean || true; \
