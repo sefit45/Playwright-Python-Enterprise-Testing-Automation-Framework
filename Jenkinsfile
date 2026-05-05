@@ -100,7 +100,7 @@ pipeline {
                     ]]) {
                         bat """
                         set BUILD_NUMBER=${env.BUILD_NUMBER}
-                        python utils\\flaky_aggregator.py
+                        "C:\\Users\\sefit\\AppData\\Local\\Programs\\Python\\Python314\\python.exe" utils\\flaky_aggregator.py
                         """
                     }
                 }
@@ -121,7 +121,7 @@ pipeline {
                 echo "Allure:"
                 echo "https://qa-automation-reports-bucket-sefi.s3.eu-central-1.amazonaws.com/allure-latest/index.html"
 
-                echo "Flaky Dashboard:"
+                echo "Flaky Aggregated:"
                 echo "https://qa-automation-reports-bucket-sefi.s3.eu-central-1.amazonaws.com/flaky-reports/aggregated-latest.json"
             }
         }
@@ -186,10 +186,6 @@ def runEcsTask(String marker, String suiteName) {
         """
 
         def result = readFile("result-${suiteName}.json")
-
-        // ===============================
-        // SMART RESULT HANDLING
-        // ===============================
 
         if (result.contains('"exitCode": 0')) {
             echo "Suite ${suiteName} PASSED"
