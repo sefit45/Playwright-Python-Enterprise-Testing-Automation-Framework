@@ -29,14 +29,14 @@ RUN apt-get update && \
 COPY . .
 
 # Default command:
-# 1. Run all discovered tests with retry strategy
+# 1. Run all real tests in parallel (exclude demo)
 # 2. Save pytest exit code
-# 3. Generate Flaky dashboard and inject into Allure
-# 4. Generate Allure report even if tests fail
-# 5. Upload HTML + Allure reports to S3
-# 6. Exit with original pytest exit code so Jenkins remains accurate
+# 3. Generate Flaky dashboard
+# 4. Generate Allure report (even on failure)
+# 5. Upload reports to S3
+# 6. Exit with original pytest result
 CMD ["bash", "-c", "\
-pytest --env=dev --reruns 2 --reruns-delay 2; \
+pytest -n 3 -m \"not demo\" --env=dev --reruns 2 --reruns-delay 2; \
 TEST_EXIT_CODE=$?; \
 python utils/flaky_dashboard.py; \
 allure generate allure-results -o allure-report --clean || true; \
