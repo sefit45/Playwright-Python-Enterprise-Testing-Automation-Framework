@@ -29,8 +29,17 @@ RUN apt-get update && \
 COPY . .
 
 # Default command:
-# 1. Run regression tests and save pytest exit code
-# 2. Generate Allure report even if tests fail
-# 3. Upload HTML + Allure reports to S3
-# 4. Exit with original pytest exit code so Jenkins can still fail correctly
-CMD ["bash", "-c", "pytest -m 'regression and not demo' --env=dev; TEST_EXIT_CODE=$?; allure generate allure-results -o allure-report --clean || true; python upload_report.py; exit $TEST_EXIT_CODE"]
+# 1. Run regression tests with retry strategy (Flaky handling)
+# 2. Save pytest exit code
+# 3. Generate Flaky dashboard and inject into Allure
+# 4. Generate Allure report even if tests fail
+# 5. Upload HTML + Allure reports to S3
+# 6. Exit with original pytest exit code so Jenkins remains accurate
+CMD ["bash", "-c", "\
+pytest -m 'regression and not demo' --env=dev --reruns 2 --reruns-delay 2; \
+TEST_EXIT_CODE=$?; \
+python utils/flaky_dashboard.py; \
+allure generate allure-results -o allure-report --clean || true; \
+python upload_report.py; \
+exit $TEST_EXIT_CODE \
+"]
