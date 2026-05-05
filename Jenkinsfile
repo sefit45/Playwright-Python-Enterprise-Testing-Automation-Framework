@@ -181,11 +181,16 @@ pipeline {
             echo "SUCCESS - Jenkins built image, pushed to ECR, ran ECS Fargate task, waited for completion and tests passed"
 
             withCredentials([string(credentialsId: 'slack-webhook-url', variable: 'SLACK_WEBHOOK_URL')]) {
-                bat """
-                curl -X POST -H "Content-type: application/json" ^
-                  --data "{\\"text\\":\\"✅ QA PASSED | Build ${BUILD_NUMBER} | Report: https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${REPORT_FILE} | Latest: https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${LATEST_REPORT_FILE}\\"}" ^
-                  %SLACK_WEBHOOK_URL%
-                """
+                script {
+                    writeFile file: 'send-slack.ps1', text: """
+\$payload = @{
+    text = "✅ QA PASSED - Build ${BUILD_NUMBER} - Report: https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${REPORT_FILE} - Latest: https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${LATEST_REPORT_FILE}"
+} | ConvertTo-Json -Compress
+
+Invoke-RestMethod -Uri \$env:SLACK_WEBHOOK_URL -Method Post -ContentType "application/json" -Body \$payload
+"""
+                    bat 'powershell -NoProfile -ExecutionPolicy Bypass -File send-slack.ps1'
+                }
             }
         }
 
@@ -193,11 +198,16 @@ pipeline {
             echo "FAILURE - Jenkins pipeline failed or tests failed"
 
             withCredentials([string(credentialsId: 'slack-webhook-url', variable: 'SLACK_WEBHOOK_URL')]) {
-                bat """
-                curl -X POST -H "Content-type: application/json" ^
-                  --data "{\\"text\\":\\"❌ QA FAILED | Build ${BUILD_NUMBER} | Report: https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${REPORT_FILE} | Latest: https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${LATEST_REPORT_FILE}\\"}" ^
-                  %SLACK_WEBHOOK_URL%
-                """
+                script {
+                    writeFile file: 'send-slack.ps1', text: """
+\$payload = @{
+    text = "❌ QA FAILED - Build ${BUILD_NUMBER} - Report: https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${REPORT_FILE} - Latest: https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${LATEST_REPORT_FILE}"
+} | ConvertTo-Json -Compress
+
+Invoke-RestMethod -Uri \$env:SLACK_WEBHOOK_URL -Method Post -ContentType "application/json" -Body \$payload
+"""
+                    bat 'powershell -NoProfile -ExecutionPolicy Bypass -File send-slack.ps1'
+                }
             }
         }
     }
