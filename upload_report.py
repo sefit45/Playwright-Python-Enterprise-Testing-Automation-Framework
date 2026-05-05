@@ -3,55 +3,63 @@ from datetime import datetime
 
 BUCKET_NAME = "qa-automation-reports-bucket-sefi"
 
+def run_command(cmd):
+    print(f"Running: {cmd}")
+    if os.system(cmd) != 0:
+        raise Exception(f"Command failed: {cmd}")
 
-def upload_html_report_to_s3():
+def upload_html_report():
     report_path = "/app/report.html"
-    allure_report_path = "/app/allure-report"
 
     if not os.path.exists(report_path):
-        print("report.html was not found. Skipping HTML report upload.")
-    else:
-        report_file = os.getenv("REPORT_FILE")
+        print("report.html not found, skipping HTML upload")
+        return None
 
-        if report_file:
-            s3_report_name = report_file
-        else:
-            timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-            s3_report_name = f"report-{timestamp}.html"
+    timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+    report_name = f"report-{timestamp}.html"
 
-        upload_main = f"aws s3 cp {report_path} s3://{BUCKET_NAME}/{s3_report_name}"
-        upload_latest = f"aws s3 cp {report_path} s3://{BUCKET_NAME}/latest.html"
+    run_command(f"aws s3 cp {report_path} s3://{BUCKET_NAME}/{report_name}")
+    run_command(f"aws s3 cp {report_path} s3://{BUCKET_NAME}/latest.html")
 
-        print(f"Uploading HTML report: s3://{BUCKET_NAME}/{s3_report_name}")
+    return report_name
 
-        if os.system(upload_main) != 0:
-            raise Exception("Failed to upload main HTML report")
+def upload_allure_report():
+    allure_dir = "/app/allure-report"
 
-        print("Uploading latest.html")
+    if not os.path.exists(allure_dir):
+        print("Allure report not found, skipping")
+        return
 
-        if os.system(upload_latest) != 0:
-            raise Exception("Failed to upload latest HTML report")
+    # מחיקת הקודם
+    run_command(f"aws s3 rm s3://{BUCKET_NAME}/allure-latest/ --recursive")
 
-        print("HTML report + latest.html uploaded successfully")
+    # העלאה חדשה
+    run_command(f"aws s3 cp {allure_dir} s3://{BUCKET_NAME}/allure-latest/ --recursive")
 
-    if os.path.exists(allure_report_path):
-        allure_folder = os.getenv("ALLURE_REPORT_FOLDER", "allure-latest")
+def send_slack_notification(report_name):
+    slack_webhook = os.getenv("SLACK_WEBHOOK_URL")
 
-        upload_allure = (
-            f"aws s3 sync {allure_report_path} "
-            f"s3://{BUCKET_NAME}/{allure_folder}/ --delete"
-        )
+    if not slack_webhook:
+        print("No Slack webhook configured")
+        return
 
-        print(f"Uploading Allure report: s3://{BUCKET_NAME}/{allure_folder}/")
+    allure_url = f"https://{BUCKET_NAME}.s3.eu-central-1.amazonaws.com/allure-latest/index.html"
+    html_url = f"https://{BUCKET_NAME}.s3.eu-central-1.amazonaws.com/{report_name}"
 
-        if os.system(upload_allure) != 0:
-            raise Exception("Failed to upload Allure report")
+    message = f"""
+QA Results:
+Report: {html_url}
+Allure: {allure_url}
+"""
 
-        print("Allure report uploaded successfully")
-        print(f"Allure URL: https://{BUCKET_NAME}.s3.eu-central-1.amazonaws.com/{allure_folder}/index.html")
-    else:
-        print("allure-report folder was not found. Skipping Allure upload.")
+    payload = f"""curl -X POST -H 'Content-type: application/json' \
+--data '{{"text":"{message}"}}' {slack_webhook}"""
 
+    run_command(payload)
 
 if __name__ == "__main__":
-    upload_html_report_to_s3()
+    report_name = upload_html_report()
+    upload_allure_report()
+
+    if report_name:
+        send_slack_notification(report_name)
