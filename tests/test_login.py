@@ -4,6 +4,9 @@ import pytest
 # JSON library - ספרייה לקריאת נתוני בדיקה מקובץ JSON
 import json
 
+# Import Allure for structured reporting
+import allure
+
 # Playwright expect - מנגנון בדיקות ואימותים של Playwright
 from playwright.sync_api import expect
 
@@ -19,11 +22,17 @@ def load_test_data():
 
 
 # Data driven login test - בדיקת Login מבוססת נתונים
+@allure.feature("UI Login")
+@allure.story("Login using JSON test data")
+@allure.title("Validate login from JSON data")
+@allure.severity(allure.severity_level.CRITICAL)
+@pytest.mark.ui
+@pytest.mark.regression
 @pytest.mark.parametrize("data", load_test_data())
-def test_login_from_json(login_page, base_url, data):
+def test_login_from_json(login_page, ui_base_url, data):
 
-    # Open login page using base URL - פתיחת מסך ההתחברות לפי הסביבה שנבחרה
-    login_page.goto(base_url + "/login")
+    # Open login page using selected UI base URL
+    login_page.goto(ui_base_url + "/login")
 
     # Perform login action - ביצוע התחברות עם המשתמש והסיסמה מה-JSON
     login_page.login(
