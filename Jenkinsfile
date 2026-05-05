@@ -22,24 +22,25 @@ pipeline {
             steps {
                 script {
                     def tag = "build-${env.BUILD_NUMBER}"
-                    echo "Building Docker image: ${ECR_REPO}:${tag}"
+
+                    echo "Building Docker image: ${env.ECR_REPO}:${tag}"
 
                     bat "docker build -t qa-framework:latest ."
-                    bat "docker tag qa-framework:latest ${ECR_REPO}:${tag}"
-                    bat "docker tag qa-framework:latest ${ECR_REPO}:latest" 
+                    bat "docker tag qa-framework:latest ${env.ECR_REPO}:${tag}"
+                    bat "docker tag qa-framework:latest ${env.ECR_REPO}:latest"
                 }
             }
         }
 
         stage('03 - AWS ECR Login') {
             steps {
-                withCredentials([
-                    string(credentialsId: 'aws-creds', variable: 'AWS_ACCESS_KEY_ID'),
-                    string(credentialsId: 'aws-creds', variable: 'AWS_SECRET_ACCESS_KEY')
-                ]) {
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-creds'
+                ]]) {
                     bat """
                     aws ecr get-login-password --region %AWS_REGION% ^
-                    | docker login --username AWS --password-stdin ${ECR_REPO}
+                    | docker login --username AWS --password-stdin ${env.ECR_REPO}
                     """
                 }
             }
@@ -47,12 +48,12 @@ pipeline {
 
         stage('04 - Push Image') {
             steps {
-                withCredentials([
-                    string(credentialsId: 'aws-creds', variable: 'AWS_ACCESS_KEY_ID'),
-                    string(credentialsId: 'aws-creds', variable: 'AWS_SECRET_ACCESS_KEY')
-                ]) {
-                    bat "docker push ${ECR_REPO}:build-${env.BUILD_NUMBER}"
-                    bat "docker push ${ECR_REPO}:latest"
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-creds'
+                ]]) {
+                    bat "docker push ${env.ECR_REPO}:build-${env.BUILD_NUMBER}"
+                    bat "docker push ${env.ECR_REPO}:latest"
                 }
             }
         }
@@ -83,17 +84,16 @@ pipeline {
                         }
                     }
                 }
-
             }
         }
 
         stage('06 - Aggregate Flaky Reports') {
             steps {
                 script {
-                    withCredentials([
-                        string(credentialsId: 'aws-creds', variable: 'AWS_ACCESS_KEY_ID'),
-                        string(credentialsId: 'aws-creds', variable: 'AWS_SECRET_ACCESS_KEY')
-                    ]) {
+                    withCredentials([[
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'aws-creds'
+                    ]]) {
                         bat """
                         set BUILD_NUMBER=${env.BUILD_NUMBER}
                         "C:\\Users\\sefit\\AppData\\Local\\Programs\\Python\\Python314\\python.exe" utils\\flaky_aggregator.py
@@ -126,7 +126,7 @@ pipeline {
             steps {
                 script {
                     withCredentials([
-                        string(credentialsId: 'slack-webhook', variable: 'SLACK_WEBHOOK')
+                        string(credentialsId: 'slack-webhook-url', variable: 'SLACK_WEBHOOK')
                     ]) {
                         bat """
                         set BUILD_NUMBER=${env.BUILD_NUMBER}
@@ -155,7 +155,7 @@ pipeline {
 }
 
 
-def runECSTest(suite, marker) {
+def runECSTest(String suite, String marker) {
 
     echo "======================================="
     echo "Running ECS suite: ${suite}"
@@ -165,10 +165,10 @@ def runECSTest(suite, marker) {
     def taskFile = "task-${suite}.json"
     def resultFile = "result-${suite}.json"
 
-    withCredentials([
-        string(credentialsId: 'aws-creds', variable: 'AWS_ACCESS_KEY_ID'),
-        string(credentialsId: 'aws-creds', variable: 'AWS_SECRET_ACCESS_KEY')
-    ]) {
+    withCredentials([[
+        $class: 'AmazonWebServicesCredentialsBinding',
+        credentialsId: 'aws-creds'
+    ]]) {
 
         bat """
         aws ecs run-task ^
@@ -209,8 +209,10 @@ def runECSTest(suite, marker) {
 
         if (status == "0") {
             echo "Suite ${suite} PASSED"
-        } else {
+        } else if (suite == "db") {
             echo "Suite ${suite} has no tests or is optional → SKIPPED"
+        } else {
+            error "Suite ${suite} FAILED"
         }
     }
 }
