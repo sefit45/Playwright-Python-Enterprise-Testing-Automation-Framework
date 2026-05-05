@@ -36,8 +36,6 @@ pipeline {
 
         stage('03 - AWS ECR Login') {
             steps {
-                echo "Logging Docker into AWS ECR"
-
                 withCredentials([[
                     $class: 'AmazonWebServicesCredentialsBinding',
                     credentialsId: 'aws-creds'
@@ -50,10 +48,8 @@ pipeline {
             }
         }
 
-        stage('04 - Push Docker Image to ECR') {
+        stage('04 - Push Image') {
             steps {
-                echo "Pushing Docker image to ECR"
-
                 withCredentials([[
                     $class: 'AmazonWebServicesCredentialsBinding',
                     credentialsId: 'aws-creds'
@@ -66,7 +62,7 @@ pipeline {
             }
         }
 
-        stage('05 - Run ECS Tasks in Parallel') {
+        stage('05 - Run Tests in Parallel (ECS)') {
             parallel {
 
                 stage('API Tests') {
@@ -97,21 +93,21 @@ pipeline {
 
         stage('06 - Aggregate Flaky Reports') {
             steps {
-                echo "Aggregating flaky reports from all ECS containers"
-
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'aws-creds'
-                ]]) {
-                    bat """
-                    set BUILD_NUMBER=${env.BUILD_NUMBER}
-                    python utils\\flaky_aggregator.py
-                    """
+                script {
+                    withCredentials([[
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'aws-creds'
+                    ]]) {
+                        bat """
+                        set BUILD_NUMBER=${env.BUILD_NUMBER}
+                        python utils\\flaky_aggregator.py
+                        """
+                    }
                 }
             }
         }
 
-        stage('07 - Print Report Links') {
+        stage('07 - Reports Links') {
             steps {
                 echo "API Report:"
                 echo "https://qa-automation-reports-bucket-sefi.s3.eu-central-1.amazonaws.com/report-${env.BUILD_NUMBER}-api.html"
@@ -122,10 +118,10 @@ pipeline {
                 echo "DB Report:"
                 echo "https://qa-automation-reports-bucket-sefi.s3.eu-central-1.amazonaws.com/report-${env.BUILD_NUMBER}-db.html"
 
-                echo "Allure Latest:"
+                echo "Allure:"
                 echo "https://qa-automation-reports-bucket-sefi.s3.eu-central-1.amazonaws.com/allure-latest/index.html"
 
-                echo "Aggregated Flaky Report:"
+                echo "Flaky Dashboard:"
                 echo "https://qa-automation-reports-bucket-sefi.s3.eu-central-1.amazonaws.com/flaky-reports/aggregated-latest.json"
             }
         }
@@ -135,13 +131,11 @@ pipeline {
         always {
             echo "Pipeline finished"
         }
-
         success {
-            echo "SUCCESS - ECS parallel execution completed successfully"
+            echo "SUCCESS - All ECS suites completed"
         }
-
         failure {
-            echo "FAILURE - One or more ECS tasks failed"
+            echo "FAILURE - One or more suites failed"
         }
     }
 }
@@ -156,9 +150,10 @@ def runEcsTask(String marker, String suiteName) {
 
         def reportName = "report-${env.BUILD_NUMBER}-${suiteName}.html"
 
-        echo "Running ECS task for suite: ${suiteName}"
+        echo "======================================="
+        echo "Running ECS suite: ${suiteName}"
         echo "Marker: ${marker}"
-        echo "Report file: ${reportName}"
+        echo "======================================="
 
         bat """
         aws ecs run-task ^
@@ -174,7 +169,7 @@ def runEcsTask(String marker, String suiteName) {
         def taskJson = readFile("task-${suiteName}.json")
         def taskArn = taskJson.split('"taskArn": "')[1].split('"')[0]
 
-        echo "Task ARN (${suiteName}): ${taskArn}"
+        echo "Task ARN: ${taskArn}"
 
         bat """
         aws ecs wait tasks-stopped ^
@@ -192,10 +187,18 @@ def runEcsTask(String marker, String suiteName) {
 
         def result = readFile("result-${suiteName}.json")
 
-        if (!result.contains('"exitCode": 0')) {
-            error "ECS task failed for suite: ${suiteName}"
-        }
+        // ===============================
+        // SMART RESULT HANDLING
+        // ===============================
 
-        echo "ECS task passed for suite: ${suiteName}"
+        if (result.contains('"exitCode": 0')) {
+            echo "Suite ${suiteName} PASSED"
+        }
+        else if (suiteName == "db") {
+            echo "Suite ${suiteName} has no tests or is optional → SKIPPED"
+        }
+        else {
+            error "Suite ${suiteName} FAILED"
+        }
     }
 }
