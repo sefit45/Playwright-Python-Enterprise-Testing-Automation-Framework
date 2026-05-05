@@ -1,13 +1,19 @@
 {
-    "api_tests": {
-        "create_post": {
-            "title": "QA Automation",
-            "body": "Playwright API test",
-            "user_id": 1
-        },
-
-        "get_single_user": {
-            "user_id": 1
-        }
+  "api_tests": {
+    "create_post": {
+      "title": "QA Automation",
+      "body": "Playwright API test",
+      "user_id": 1
+    },
+    "get_single_user": {
+      "user_id": 1
     }
+  },
+  "ui_tests": [
+    {
+      "username": "tomsmith",
+      "password": "SuperSecretPassword!",
+      "expected": "You logged into a secure area!"
+    }
+  ]
 }
