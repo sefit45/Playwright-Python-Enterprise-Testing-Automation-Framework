@@ -6,47 +6,67 @@ pipeline {
         ECR_REPO = "401713183707.dkr.ecr.eu-central-1.amazonaws.com/qa-framework"
         CLUSTER = "qa-automation-cluster-fixed-after-role-definition"
         TASK_DEF = "qa-framework-task"
+        CONTAINER_NAME = "qa-framework"
         SUBNET = "subnet-018492d0f5ea2c9c9"
         SG = "sg-06c270f9f6e045654"
     }
 
     stages {
 
-        stage('Checkout') {
+        stage('01 - Checkout') {
             steps {
                 checkout scm
             }
         }
 
-        stage('Build Docker Image') {
+        stage('02 - Build Docker Image') {
             steps {
                 script {
-                    def tag = "build-${env.BUILD_NUMBER}"
-                    env.IMAGE = "${ECR_REPO}:${tag}"
+                    env.IMAGE_TAG = "build-${env.BUILD_NUMBER}"
+                    env.FULL_IMAGE = "${env.ECR_REPO}:${env.IMAGE_TAG}"
+
+                    echo "Building Docker image: ${env.FULL_IMAGE}"
 
                     bat "docker build -t qa-framework:latest ."
-                    bat "docker tag qa-framework:latest ${env.IMAGE}"
-                    bat "docker tag qa-framework:latest ${ECR_REPO}:latest"
+                    bat "docker tag qa-framework:latest ${env.FULL_IMAGE}"
+                    bat "docker tag qa-framework:latest ${env.ECR_REPO}:latest"
                 }
             }
         }
 
-        stage('ECR Login & Push') {
+        stage('03 - AWS ECR Login') {
             steps {
+                echo "Logging Docker into AWS ECR"
+
                 withCredentials([[
                     $class: 'AmazonWebServicesCredentialsBinding',
                     credentialsId: 'aws-creds'
                 ]]) {
                     bat """
-                    aws ecr get-login-password --region %AWS_REGION% | docker login --username AWS --password-stdin ${ECR_REPO}
-                    docker push ${env.IMAGE}
-                    docker push ${ECR_REPO}:latest
+                    aws ecr get-login-password --region %AWS_REGION% ^
+                    | docker login --username AWS --password-stdin 401713183707.dkr.ecr.eu-central-1.amazonaws.com
                     """
                 }
             }
         }
 
-        stage('Run ECS Tasks in Parallel') {
+        stage('04 - Push Docker Image to ECR') {
+            steps {
+                echo "Pushing Docker image to ECR"
+
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-creds'
+                ]]) {
+                    bat """
+                    docker push ${env.FULL_IMAGE}
+                    docker push ${env.ECR_REPO}:latest
+                    """
+                }
+            }
+        }
+
+        stage('05 - Run ECS Tasks in Parallel') {
             parallel {
 
                 stage('API Tests') {
@@ -74,55 +94,108 @@ pipeline {
                 }
             }
         }
+
+        stage('06 - Aggregate Flaky Reports') {
+            steps {
+                echo "Aggregating flaky reports from all ECS containers"
+
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-creds'
+                ]]) {
+                    bat """
+                    set BUILD_NUMBER=${env.BUILD_NUMBER}
+                    python utils\\flaky_aggregator.py
+                    """
+                }
+            }
+        }
+
+        stage('07 - Print Report Links') {
+            steps {
+                echo "API Report:"
+                echo "https://qa-automation-reports-bucket-sefi.s3.eu-central-1.amazonaws.com/report-${env.BUILD_NUMBER}-api.html"
+
+                echo "UI Report:"
+                echo "https://qa-automation-reports-bucket-sefi.s3.eu-central-1.amazonaws.com/report-${env.BUILD_NUMBER}-ui.html"
+
+                echo "DB Report:"
+                echo "https://qa-automation-reports-bucket-sefi.s3.eu-central-1.amazonaws.com/report-${env.BUILD_NUMBER}-db.html"
+
+                echo "Allure Latest:"
+                echo "https://qa-automation-reports-bucket-sefi.s3.eu-central-1.amazonaws.com/allure-latest/index.html"
+
+                echo "Aggregated Flaky Report:"
+                echo "https://qa-automation-reports-bucket-sefi.s3.eu-central-1.amazonaws.com/flaky-reports/aggregated-latest.json"
+            }
+        }
+    }
+
+    post {
+        always {
+            echo "Pipeline finished"
+        }
+
+        success {
+            echo "SUCCESS - ECS parallel execution completed successfully"
+        }
+
+        failure {
+            echo "FAILURE - One or more ECS tasks failed"
+        }
     }
 }
 
-def runEcsTask(marker, name) {
+
+def runEcsTask(String marker, String suiteName) {
 
     withCredentials([[
         $class: 'AmazonWebServicesCredentialsBinding',
         credentialsId: 'aws-creds'
     ]]) {
 
-        def reportName = "report-${env.BUILD_NUMBER}-${name}.html"
+        def reportName = "report-${env.BUILD_NUMBER}-${suiteName}.html"
+
+        echo "Running ECS task for suite: ${suiteName}"
+        echo "Marker: ${marker}"
+        echo "Report file: ${reportName}"
 
         bat """
         aws ecs run-task ^
-          --cluster ${CLUSTER} ^
+          --cluster ${env.CLUSTER} ^
           --launch-type FARGATE ^
-          --task-definition ${TASK_DEF} ^
+          --task-definition ${env.TASK_DEF} ^
           --count 1 ^
-          --network-configuration "awsvpcConfiguration={subnets=[${SUBNET}],securityGroups=[${SG}],assignPublicIp=ENABLED}" ^
-          --overrides "{\\"containerOverrides\\":[{\\"name\\":\\"qa-framework\\",\\"environment\\":[{\\"name\\":\\"PYTEST_MARKER\\",\\"value\\":\\"${marker}\\"},{\\"name\\":\\"REPORT_FILE\\",\\"value\\":\\"${reportName}\\"}]}]}" ^
-          --region ${AWS_REGION} > task-${name}.json
+          --network-configuration "awsvpcConfiguration={subnets=[${env.SUBNET}],securityGroups=[${env.SG}],assignPublicIp=ENABLED}" ^
+          --overrides "{\\"containerOverrides\\":[{\\"name\\":\\"${env.CONTAINER_NAME}\\",\\"environment\\":[{\\"name\\":\\"PYTEST_MARKER\\",\\"value\\":\\"${marker}\\"},{\\"name\\":\\"REPORT_FILE\\",\\"value\\":\\"${reportName}\\"},{\\"name\\":\\"BUILD_NUMBER\\",\\"value\\":\\"${env.BUILD_NUMBER}\\"}]}]}" ^
+          --region ${env.AWS_REGION} > task-${suiteName}.json
         """
 
-        def taskArn = readFile("task-${name}.json")
-            .split('"taskArn": "')[1]
-            .split('"')[0]
+        def taskJson = readFile("task-${suiteName}.json")
+        def taskArn = taskJson.split('"taskArn": "')[1].split('"')[0]
 
-        echo "Task ARN (${name}): ${taskArn}"
+        echo "Task ARN (${suiteName}): ${taskArn}"
 
         bat """
         aws ecs wait tasks-stopped ^
-          --cluster ${CLUSTER} ^
+          --cluster ${env.CLUSTER} ^
           --tasks ${taskArn} ^
-          --region ${AWS_REGION}
+          --region ${env.AWS_REGION}
         """
 
         bat """
         aws ecs describe-tasks ^
-          --cluster ${CLUSTER} ^
+          --cluster ${env.CLUSTER} ^
           --tasks ${taskArn} ^
-          --region ${AWS_REGION} > result-${name}.json
+          --region ${env.AWS_REGION} > result-${suiteName}.json
         """
 
-        def result = readFile("result-${name}.json")
+        def result = readFile("result-${suiteName}.json")
 
         if (!result.contains('"exitCode": 0')) {
-            error "Task ${name} FAILED"
-        } else {
-            echo "Task ${name} PASSED"
+            error "ECS task failed for suite: ${suiteName}"
         }
+
+        echo "ECS task passed for suite: ${suiteName}"
     }
 }
