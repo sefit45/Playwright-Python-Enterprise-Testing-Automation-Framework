@@ -3,10 +3,12 @@ from datetime import datetime
 
 BUCKET_NAME = "qa-automation-reports-bucket-sefi"
 
+
 def run_cmd(cmd):
     print(f"Running: {cmd}")
     if os.system(cmd) != 0:
         raise Exception(f"Command failed: {cmd}")
+
 
 def upload_html_report():
     report_path = "/app/report.html"
@@ -30,6 +32,7 @@ def upload_html_report():
 
     return s3_name
 
+
 def upload_allure_report():
     allure_path = "/app/allure-report"
 
@@ -45,10 +48,42 @@ def upload_allure_report():
         f"--recursive"
     )
 
+
+def upload_flaky_report():
+    flaky_report_path = "/app/flaky-reports/flaky_report.json"
+
+    if not os.path.exists(flaky_report_path):
+        print("flaky_report.json not found - skipping flaky report upload")
+        return
+
+    report_file = os.getenv("REPORT_FILE")
+
+    if report_file:
+        build_id = report_file.replace("report-", "").replace(".html", "")
+        flaky_report_name = f"flaky-report-{build_id}.json"
+    else:
+        timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+        flaky_report_name = f"flaky-report-{timestamp}.json"
+
+    print(f"Uploading flaky report: {flaky_report_name}")
+
+    run_cmd(
+        f"aws s3 cp {flaky_report_path} "
+        f"s3://{BUCKET_NAME}/flaky-reports/{flaky_report_name}"
+    )
+
+    run_cmd(
+        f"aws s3 cp {flaky_report_path} "
+        f"s3://{BUCKET_NAME}/flaky-reports/latest.json"
+    )
+
+
 def main():
     upload_html_report()
     upload_allure_report()
+    upload_flaky_report()
     print("All uploads completed successfully")
+
 
 if __name__ == "__main__":
     main()
