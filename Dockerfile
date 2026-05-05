@@ -16,9 +16,9 @@ RUN pip install -r requirements.txt
 # Install AWS CLI for uploading reports to S3
 RUN pip install awscli
 
-# Install Allure CLI
+# Install Java + Allure CLI
 RUN apt-get update && \
-    apt-get install -y wget unzip && \
+    apt-get install -y wget unzip openjdk-11-jre && \
     wget https://github.com/allure-framework/allure2/releases/download/2.29.0/allure-2.29.0.zip && \
     unzip allure-2.29.0.zip -d /opt/ && \
     ln -s /opt/allure-2.29.0/bin/allure /usr/bin/allure && \
@@ -33,4 +33,4 @@ COPY . .
 # 2. Generate Allure report even if tests fail
 # 3. Upload HTML + Allure reports to S3
 # 4. Exit with original pytest exit code so Jenkins can still fail correctly
-CMD ["bash", "-c", "pytest -m 'regression and not demo' --env=dev; TEST_EXIT_CODE=$?; allure generate allure-results -o allure-report --clean; python upload_report.py; exit $TEST_EXIT_CODE"]
+CMD ["bash", "-c", "pytest -m 'regression and not demo' --env=dev; TEST_EXIT_CODE=$?; allure generate allure-results -o allure-report --clean || true; python upload_report.py; exit $TEST_EXIT_CODE"]
