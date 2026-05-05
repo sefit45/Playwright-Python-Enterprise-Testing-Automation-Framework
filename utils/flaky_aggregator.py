@@ -1,159 +1,132 @@
 import json
 import os
+from collections import defaultdict
 from datetime import datetime
 
-
 BUCKET_NAME = "qa-automation-reports-bucket-sefi"
-LOCAL_OUTPUT_DIR = "flaky-aggregated"
+LOCAL_DIR = "flaky-aggregated"
 
 
 def run_cmd(cmd):
     print(f"Running: {cmd}")
     exit_code = os.system(cmd)
-
     if exit_code != 0:
         raise Exception(f"Command failed: {cmd}")
 
 
 def extract_build_number():
-    build_number = os.getenv("BUILD_NUMBER")
-
-    if build_number:
-        return build_number
-
-    report_file = os.getenv("REPORT_FILE")
-
-    if report_file:
-        return (
-            report_file
-            .replace("report-", "")
-            .replace("-api.html", "")
-            .replace("-ui.html", "")
-            .replace("-db.html", "")
-            .replace(".html", "")
-        )
-
-    return datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+    return os.getenv("BUILD_NUMBER", "unknown")
 
 
-def download_flaky_report(build_number, suite_name):
-    s3_key = f"flaky-reports/flaky-report-{build_number}-{suite_name}.json"
-    local_file = os.path.join(LOCAL_OUTPUT_DIR, f"{suite_name}.json")
+def download_report(build_number, suite):
+    s3_path = f"s3://{BUCKET_NAME}/flaky-reports/flaky-report-{build_number}-{suite}.json"
+    local_path = f"{LOCAL_DIR}/{suite}.json"
 
-    cmd = (
-        f"aws s3 cp "
-        f"s3://{BUCKET_NAME}/{s3_key} "
-        f"{local_file}"
-    )
-
-    exit_code = os.system(cmd)
-
-    if exit_code != 0:
-        print(f"Flaky report not found for suite: {suite_name}")
+    cmd = f"aws s3 cp {s3_path} {local_path}"
+    if os.system(cmd) != 0:
+        print(f"Skipping missing report: {suite}")
         return None
 
-    return local_file
+    return local_path
 
 
-def read_json_file(file_path):
-    with open(file_path, "r", encoding="utf-8") as file:
-        return json.load(file)
+def load_json(path):
+    with open(path, "r") as f:
+        return json.load(f)
 
 
-def aggregate_reports(report_files):
+def aggregate(build_number):
+
+    suites = ["api", "ui", "db"]
+
+    total_tests = 0
+    total_flaky = 0
+    total_retried = 0
+
+    passed_tests = 0
+    failed_tests = 0
+
+    retry_counter = defaultdict(int)
+
     aggregated = {
-        "total_tests": 0,
-        "total_retried_tests": 0,
-        "total_flaky_tests": 0,
-        "suites": {},
-        "flaky_tests": [],
-        "generated_at": datetime.now().isoformat()
+        "build_number": build_number,
+        "generated_at": datetime.utcnow().isoformat(),
+        "suites": {}
     }
 
-    for suite_name, file_path in report_files.items():
-        if not file_path:
+    for suite in suites:
+        path = download_report(build_number, suite)
+
+        if not path:
             continue
 
-        report = read_json_file(file_path)
+        data = load_json(path)
 
-        total_tests = report.get("total_tests", 0)
-        retried_tests = report.get("retried_tests", 0)
-        flaky_tests = report.get("flaky_tests", [])
-        retry_count = report.get("retry_count", {})
+        suite_total = data.get("total_tests", 0)
+        suite_flaky = data.get("total_flaky_tests", 0)
+        suite_retried = data.get("total_retried_tests", 0)
 
-        aggregated["total_tests"] += total_tests
-        aggregated["total_retried_tests"] += retried_tests
+        total_tests += suite_total
+        total_flaky += suite_flaky
+        total_retried += suite_retried
 
-        aggregated["suites"][suite_name] = {
-            "total_tests": total_tests,
-            "retried_tests": retried_tests,
-            "flaky_tests": flaky_tests,
-            "retry_count": retry_count
+        # נחשב passed/failed (בקירוב)
+        suite_failed = suite_retried  # כשלו לפחות פעם
+        suite_passed = suite_total - suite_failed
+
+        passed_tests += suite_passed
+        failed_tests += suite_failed
+
+        # ספירת flaky לפי טסט
+        for test in data.get("flaky_tests", []):
+            retry_counter[test["test_name"]] += test.get("retry_count", 1)
+
+        aggregated["suites"][suite] = {
+            "total_tests": suite_total,
+            "flaky_tests": suite_flaky,
+            "retried_tests": suite_retried
         }
 
-        for test_name in flaky_tests:
-            aggregated["flaky_tests"].append({
-                "suite": suite_name,
-                "test_name": test_name,
-                "retry_count": retry_count.get(test_name, 0)
-            })
+    # 🔥 Top Flaky Tests
+    top_flaky = sorted(
+        [{"test_name": k, "retry_count": v} for k, v in retry_counter.items()],
+        key=lambda x: x["retry_count"],
+        reverse=True
+    )[:5]
 
-    aggregated["total_flaky_tests"] = len(aggregated["flaky_tests"])
+    # חישובים כלליים
+    flaky_rate = round((total_flaky / total_tests) * 100, 2) if total_tests else 0
+    pass_rate = round((passed_tests / total_tests) * 100, 2) if total_tests else 0
 
-    if aggregated["total_tests"] > 0:
-        aggregated["flaky_rate"] = round(
-            (aggregated["total_flaky_tests"] / aggregated["total_tests"]) * 100,
-            2
-        )
-    else:
-        aggregated["flaky_rate"] = 0
+    aggregated.update({
+        "total_tests": total_tests,
+        "passed_tests": passed_tests,
+        "failed_tests": failed_tests,
+        "pass_rate": pass_rate,
+        "total_flaky_tests": total_flaky,
+        "flaky_rate": flaky_rate,
+        "top_flaky_tests": top_flaky
+    })
 
     return aggregated
 
 
-def upload_aggregated_report(build_number, aggregated_file):
-    run_cmd(
-        f"aws s3 cp {aggregated_file} "
-        f"s3://{BUCKET_NAME}/flaky-reports/flaky-report-{build_number}-aggregated.json"
-    )
+def save_and_upload(build_number, data):
 
-    run_cmd(
-        f"aws s3 cp {aggregated_file} "
-        f"s3://{BUCKET_NAME}/flaky-reports/aggregated-latest.json"
-    )
+    os.makedirs(LOCAL_DIR, exist_ok=True)
 
+    filename = f"{LOCAL_DIR}/flaky-report-{build_number}-aggregated.json"
 
-def main():
-    os.makedirs(LOCAL_OUTPUT_DIR, exist_ok=True)
+    with open(filename, "w") as f:
+        json.dump(data, f, indent=4)
 
-    build_number = extract_build_number()
+    print(json.dumps(data, indent=4))
 
-    print(f"Aggregating flaky reports for build: {build_number}")
-
-    suites = ["api", "ui", "db"]
-
-    report_files = {}
-
-    for suite_name in suites:
-        report_files[suite_name] = download_flaky_report(build_number, suite_name)
-
-    aggregated = aggregate_reports(report_files)
-
-    output_file = os.path.join(
-        LOCAL_OUTPUT_DIR,
-        f"flaky-report-{build_number}-aggregated.json"
-    )
-
-    with open(output_file, "w", encoding="utf-8") as file:
-        json.dump(aggregated, file, indent=4)
-
-    print("Aggregated flaky report created successfully")
-    print(json.dumps(aggregated, indent=4))
-
-    upload_aggregated_report(build_number, output_file)
-
-    print("Aggregated flaky report uploaded successfully")
+    run_cmd(f"aws s3 cp {filename} s3://{BUCKET_NAME}/flaky-reports/flaky-report-{build_number}-aggregated.json")
+    run_cmd(f"aws s3 cp {filename} s3://{BUCKET_NAME}/flaky-reports/aggregated-latest.json")
 
 
 if __name__ == "__main__":
-    main()
+    build = extract_build_number()
+    result = aggregate(build)
+    save_and_upload(build, result)
