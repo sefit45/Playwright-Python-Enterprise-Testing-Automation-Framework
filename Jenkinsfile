@@ -26,7 +26,7 @@ pipeline {
 
                     bat "docker build -t qa-framework:latest ."
                     bat "docker tag qa-framework:latest ${ECR_REPO}:${tag}"
-                    bat "docker tag qa-framework:latest ${ECR_REPO}:latest"
+                    bat "docker tag qa-framework:latest ${ECR_REPO}:latest" 
                 }
             }
         }
@@ -34,8 +34,8 @@ pipeline {
         stage('03 - AWS ECR Login') {
             steps {
                 withCredentials([
-                    string(credentialsId: 'aws-access-key', variable: 'AWS_ACCESS_KEY_ID'),
-                    string(credentialsId: 'aws-secret-key', variable: 'AWS_SECRET_ACCESS_KEY')
+                    string(credentialsId: 'aws-creds', variable: 'AWS_ACCESS_KEY_ID'),
+                    string(credentialsId: 'aws-creds', variable: 'AWS_SECRET_ACCESS_KEY')
                 ]) {
                     bat """
                     aws ecr get-login-password --region %AWS_REGION% ^
@@ -48,8 +48,8 @@ pipeline {
         stage('04 - Push Image') {
             steps {
                 withCredentials([
-                    string(credentialsId: 'aws-access-key', variable: 'AWS_ACCESS_KEY_ID'),
-                    string(credentialsId: 'aws-secret-key', variable: 'AWS_SECRET_ACCESS_KEY')
+                    string(credentialsId: 'aws-creds', variable: 'AWS_ACCESS_KEY_ID'),
+                    string(credentialsId: 'aws-creds', variable: 'AWS_SECRET_ACCESS_KEY')
                 ]) {
                     bat "docker push ${ECR_REPO}:build-${env.BUILD_NUMBER}"
                     bat "docker push ${ECR_REPO}:latest"
@@ -91,8 +91,8 @@ pipeline {
             steps {
                 script {
                     withCredentials([
-                        string(credentialsId: 'aws-access-key', variable: 'AWS_ACCESS_KEY_ID'),
-                        string(credentialsId: 'aws-secret-key', variable: 'AWS_SECRET_ACCESS_KEY')
+                        string(credentialsId: 'aws-creds', variable: 'AWS_ACCESS_KEY_ID'),
+                        string(credentialsId: 'aws-creds', variable: 'AWS_SECRET_ACCESS_KEY')
                     ]) {
                         bat """
                         set BUILD_NUMBER=${env.BUILD_NUMBER}
@@ -166,8 +166,8 @@ def runECSTest(suite, marker) {
     def resultFile = "result-${suite}.json"
 
     withCredentials([
-        string(credentialsId: 'aws-access-key', variable: 'AWS_ACCESS_KEY_ID'),
-        string(credentialsId: 'aws-secret-key', variable: 'AWS_SECRET_ACCESS_KEY')
+        string(credentialsId: 'aws-creds', variable: 'AWS_ACCESS_KEY_ID'),
+        string(credentialsId: 'aws-creds', variable: 'AWS_SECRET_ACCESS_KEY')
     ]) {
 
         bat """
